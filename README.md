@@ -1,3 +1,5 @@
+This is a fork of Isaiah Odhner's project: https://github.com/1j01/pipes
+
 # WebGL 3D Pipes&nbsp;&nbsp;<img src="favicon-32x32.png">
 
 A WebGL based remake of the Windows 3D Pipes screensaver (3D Pipes.scr or sspipes.scr) using [Three.js](https://threejs.org/)
@@ -13,6 +15,15 @@ It's also included in [98.js.org](https://98.js.org/) as a program you can run.
 [![](images/screencap.gif)](https://thorium.rocks/media/3d-pipes)
 
 (This screen capture GIF is outdated. It now avoids collisions between pipes and implements the dissolve effect for fading out.)
+
+##### Justin's Tweaks/Improvements
+
+- Camera is never positioned below the pipes, which improves lighting significantly.
+- Camera is not as zoomed in, and is never positioned inside the pipes. This more closely follows the original.
+- Added Retina display render support, which improves quality significantly.
+- Shapes are now much smoother.
+- Dissolve transition effect now uses many tiny tiles.
+- Teapot spawn chance has been reduced from 1/20 to 1/1000, which mirrors the original. On candy cane scenes, teapot spawn chance is doubled at 1/500.
 
 ## TODO
 
