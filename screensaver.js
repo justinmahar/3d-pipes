@@ -101,22 +101,48 @@ var Pipe = function(scene, options) {
     }
     var palette = [];
     if (self.colorMode === "scheme") {
-      // Two high-contrast colors within the same scheme for a striped look
+      // Two algorithmically chosen, high-contrast colors within the same scheme
+      // so stripes are obvious but still fully randomized.
       var base = randomColorInScheme(self.colorScheme);
       var alt = randomColorInScheme(self.colorScheme);
-      // ensure noticeably different: re-roll alt until far enough in RGB space
+
+      function luminance(color) {
+        var r = (color >> 16) & 0xff;
+        var g = (color >> 8) & 0xff;
+        var b = color & 0xff;
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      }
+
       var tries = 0;
-      while (tries < 10) {
+      while (tries < 20) {
         var dr = ((base >> 16) & 0xff) - ((alt >> 16) & 0xff);
         var dg = ((base >> 8) & 0xff) - ((alt >> 8) & 0xff);
         var db = (base & 0xff) - (alt & 0xff);
         var distSq = dr * dr + dg * dg + db * db;
-        if (distSq > 80 * 80) {
+        var lumDiff = Math.abs(luminance(base) - luminance(alt));
+
+        // Require both chroma and brightness difference so stripes read clearly.
+        if (distSq > 100 * 100 && lumDiff > 40) {
           break;
         }
         alt = randomColorInScheme(self.colorScheme);
         tries++;
       }
+
+      // As a last resort, derive a much lighter or darker variant of base
+      // while staying roughly within the same scheme.
+      if (tries >= 20) {
+        var br = (base >> 16) & 0xff;
+        var bg = (base >> 8) & 0xff;
+        var bb = base & 0xff;
+        var lum = luminance(base);
+        var scale = lum < 128 ? 2.2 : 0.35;
+        var nr = Math.max(0, Math.min(255, Math.round(br * scale)));
+        var ng = Math.max(0, Math.min(255, Math.round(bg * scale)));
+        var nb = Math.max(0, Math.min(255, Math.round(bb * scale)));
+        alt = (nr << 16) | (ng << 8) | nb;
+      }
+
       palette.push(base, alt);
     } else if (self.colorMode === "random") {
       // 2–10 distinct random colors, cycled for a rainbow-like effect
