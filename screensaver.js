@@ -1083,6 +1083,9 @@ function rebuildSnowSystem() {
   // Render on top of pipes where possible.
   snowPoints.frustumCulled = false;
   snowPoints.renderOrder = 1;
+  // Start hidden; visibility is controlled each frame by updateSnow()
+  // based on whether we're in an active candycane scene with pipes.
+  snowPoints.visible = false;
   scene.add(snowPoints);
 }
 
