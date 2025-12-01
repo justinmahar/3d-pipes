@@ -313,6 +313,9 @@ var options = {
   texturePath: null,
   joints: jointTypeSelect.value,
   interval: [16, 24], // range of seconds between fade-outs... not necessarily anything like how the original works
+  baseTeapotChance: 1 / 1000,
+  candyCanePipeChance: 1 / 200,
+  candyCaneTeapotChance: 1 / 500,
 };
 jointTypeSelect.addEventListener("change", function() {
   options.joints = jointTypeSelect.value;
@@ -352,6 +355,42 @@ function updateSpeedDisplay() {
 
 if (speedInputEl) {
   speedInputEl.addEventListener("input", updateSpeedDisplay);
+}
+
+// Teapot / candycane controls
+var baseTeapotInput = document.getElementById("base-teapot-denom");
+var candycanePipeInput = document.getElementById("candycane-pipe-denom");
+var candycaneTeapotInput = document.getElementById("candycane-teapot-denom");
+
+function updateTeapotChancesFromUI() {
+  function denomToChance(inputEl, fallback) {
+    if (!inputEl) return fallback;
+    var v = parseInt(inputEl.value, 10);
+    if (!isFinite(v) || v <= 0) return fallback;
+    return 1 / v;
+  }
+  options.baseTeapotChance = denomToChance(
+    baseTeapotInput,
+    options.baseTeapotChance
+  );
+  options.candyCanePipeChance = denomToChance(
+    candycanePipeInput,
+    options.candyCanePipeChance
+  );
+  options.candyCaneTeapotChance = denomToChance(
+    candycaneTeapotInput,
+    options.candyCaneTeapotChance
+  );
+}
+
+if (baseTeapotInput) {
+  baseTeapotInput.addEventListener("change", updateTeapotChancesFromUI);
+}
+if (candycanePipeInput) {
+  candycanePipeInput.addEventListener("change", updateTeapotChancesFromUI);
+}
+if (candycaneTeapotInput) {
+  candycaneTeapotInput.addEventListener("change", updateTeapotChancesFromUI);
 }
 
 var canvasContainer = document.getElementById("canvas-container");
@@ -495,15 +534,15 @@ function stepOnce() {
       jointType = jointsCycleArray[jointsCycleIndex++];
     }
     var pipeOptions = {
-      // Match the original Windows 3D Pipes teapot rarity.
-      teapotChance: 1 / 1000,
+      teapotChance: options.baseTeapotChance,
       ballJointChance:
         jointType === JOINTS_BALL ? 1 : jointType === JOINTS_MIXED ? 1 / 3 : 0,
       texturePath: options.texturePath,
     };
-    if (chance(1 / 20)) {
-      // Candy cane pipes: twice as likely as normal pipes
-      pipeOptions.teapotChance = 1 / 500;
+    // Chance that this pipe becomes a candy cane pipe
+    if (chance(options.candyCanePipeChance)) {
+      // Candy cane pipes: higher teapot chance than normal pipes
+      pipeOptions.teapotChance = options.candyCaneTeapotChance;
       pipeOptions.texturePath = "images/textures/candycane.png";
       // TODO: DRY
       if (!textures[pipeOptions.texturePath]) {
@@ -713,6 +752,7 @@ window.addEventListener("hashchange", updateFromParametersInURL);
 
 // initialize UI displays and start animation
 updateSpeedDisplay();
+updateTeapotChancesFromUI();
 animate();
 
 /**************\
