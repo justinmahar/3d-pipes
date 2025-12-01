@@ -8,22 +8,32 @@ It if a fork of https://github.com/1j01/pipes
 
 Includes both [Utah Teapots](https://en.wikipedia.org/wiki/Utah_teapot) and candy cane easter eggs! (with increased chances 😏)
 
-[Check it out!](https://thorium.rocks/media/3d-pipes)
+[Check it out!](https://3dpipes.netlify.app/)
 
 It's also included in [98.js.org](https://98.js.org/) as a program you can run.
 
-[![](images/screencap.gif)](https://thorium.rocks/media/3d-pipes)
+[![](images/screencap.gif)](https://3dpipes.netlify.app/)
 
 (This screen capture GIF is outdated. It now avoids collisions between pipes and implements the dissolve effect for fading out.)
 
 ##### Justin's Tweaks/Improvements
 
-- Camera is never positioned below the pipes, which improves lighting significantly.
-- Camera is not as zoomed in, and is never positioned inside the pipes. This more closely follows the original.
-- Added Retina display render support, which improves quality significantly.
-- Shapes are now much smoother.
-- Dissolve transition effect now uses many tiny tiles.
-- Teapot spawn chance has been reduced from 1/20 to 1/1000, which mirrors the original. On candy cane scenes, teapot spawn chance is doubled at 1/500.
+- Camera is never positioned below the pipes (improved lighting) and no longer starts inside the pipes; framing is tuned to better match the original.
+- Added Retina / high-DPI rendering support (with a Resolution control) so the scene looks razor-sharp on modern displays.
+- Added a Geometry detail control (Low / Medium / High) and increased segment counts for pipes and joints, making shapes much smoother in high quality while allowing lower-poly modes for performance.
+- Added a Speed control that actually scales the simulation (number of steps per frame), with a live numeric multiplier display.
+- Pipes now animate each new segment growing along its direction of travel so they visibly "lay" into the scene instead of popping in fully formed.
+- Implemented configurable transitions:
+  - Transition type: **Dissolve** (tile-based) or **Fade** (fullscreen).
+  - Shared Transition duration slider controlling how long the effect takes.
+  - Dissolve granularity slider, from almost pixel-sized tiles to big chunky squares.
+- Teapot & candycane behavior is now configurable from the UI:
+  - Base teapot rarity defaults to 1/1000.
+  - Candycane pipe chance defaults to 1/200.
+  - Candycane teapot chance defaults to 1/500 (more common than normal pipes).
+- Added performance-oriented controls so you can trade resolution and geometry density for smoother animation on less powerful GPUs.
+- Added keyboard shortcuts: **Space** pauses/resumes pipe growth, **R** clears pipes and restarts with a fast transition.
+- Polished the control panel UI: translucent "glass" card, tidier layout, and inline legends for mouse and keyboard controls.
 
 ## TODO
 
