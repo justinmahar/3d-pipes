@@ -296,9 +296,11 @@ var dissolveEndCallback;
 
 function dissolve(seconds, endCallback) {
   // TODO: determine rect sizes better and simplify
-  // (silly approximation of squares of a particular size:)
-  dissolveRectsPerRow = Math.ceil(window.innerWidth / 20);
-  dissolveRectsPerColumn = Math.ceil(window.innerHeight / 20);
+  // (approximation of squares of a particular size)
+  // Use smaller tiles for a finer-grained dissolve effect.
+  var targetRectSize = 8; // px
+  dissolveRectsPerRow = Math.ceil(window.innerWidth / targetRectSize);
+  dissolveRectsPerColumn = Math.ceil(window.innerHeight / targetRectSize);
 
   dissolveRects = new Array(dissolveRectsPerRow * dissolveRectsPerColumn)
     .fill(null)
@@ -331,7 +333,8 @@ function clear(fast) {
   );
   if (!clearing) {
     clearing = true;
-    var fadeOutTime = fast ? 0.2 : 2;
+    // Slightly faster dissolve overall
+    var fadeOutTime = fast ? 0.15 : 1.2;
     dissolve(fadeOutTime, reset);
   }
 }

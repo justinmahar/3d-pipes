@@ -1,0 +1,97 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #000;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #fff;
+}
+
+#canvas-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #000;
+}
+
+#canvas-webgl,
+#canvas-2d {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#canvas-2d {
+  pointer-events: none;
+}
+
+.ui-container {
+  position: fixed;
+  z-index: 10;
+}
+
+.fork-me {
+  top: 0;
+  right: 0;
+}
+
+.controls.ui-container {
+  top: 12px;
+  left: 12px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  font-size: 14px;
+}
+
+.controls button,
+.controls select,
+.controls input[type="range"] {
+  font: inherit;
+}
+
+.controls button {
+  padding: 4px 8px;
+  margin-bottom: 8px;
+  border-radius: 3px;
+  border: 1px solid #666;
+  background: #222;
+  color: #fff;
+  cursor: pointer;
+}
+
+.controls button:hover {
+  background: #333;
+}
+
+.controls table {
+  margin-top: 6px;
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+
+.controls th,
+.controls td {
+  padding: 2px 4px;
+  text-align: left;
+}
+
+.controls thead th {
+  border-bottom: 1px solid #555;
+}
+
+.controls label {
+  font-size: 13px;
+}
