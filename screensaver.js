@@ -997,14 +997,17 @@ function updateDissolveLayer() {
     if (curve <= 0) curve = 1;
     var t = Math.pow(stretchedInput, curve);
     ctx2d.save();
-    ctx2d.globalAlpha = t;
     ctx2d.fillStyle = "black";
-    ctx2d.fillRect(0, 0, canvas2d.width, canvas2d.height);
-    ctx2d.restore();
-    // Always end the transition once the configured duration has elapsed,
-    // even if the stretched curve hasn't reached full black yet.
     if (baseLinear >= 1) {
+      // At the configured end time, force a fully black frame.
+      ctx2d.globalAlpha = 1;
+      ctx2d.fillRect(0, 0, canvas2d.width, canvas2d.height);
+      ctx2d.restore();
       finishDissolve();
+    } else {
+      ctx2d.globalAlpha = t;
+      ctx2d.fillRect(0, 0, canvas2d.width, canvas2d.height);
+      ctx2d.restore();
     }
     return;
   }
@@ -1064,6 +1067,10 @@ function updateDissolveLayer() {
       dissolveRectsIndex += 1;
     }
     if (baseLinear2 >= 1 || dissolveRectsIndex === dissolveRects.length) {
+      // At the configured end time, force the whole overlay to black,
+      // regardless of how many tiles are individually filled.
+      ctx2d.fillStyle = "black";
+      ctx2d.fillRect(0, 0, canvas2d.width, canvas2d.height);
       finishDissolve();
     }
   }
