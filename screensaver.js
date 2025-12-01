@@ -45,12 +45,13 @@ var Pipe = function(scene, options) {
       deltaVector.clone().normalize(),
       fromPoint
     );
+    // Higher segment counts for smoother pipes
     var geometry = new THREE.CylinderGeometry(
       pipeRadius,
       pipeRadius,
       deltaVector.length(),
-      10,
-      4,
+      20, // radialSegments
+      8, // heightSegments
       true
     );
     var mesh = new THREE.Mesh(geometry, material);
@@ -63,7 +64,8 @@ var Pipe = function(scene, options) {
   };
   var makeBallJoint = function(position) {
     var ball = new THREE.Mesh(
-      new THREE.SphereGeometry(ballJointRadius, 8, 8),
+      // More segments for smoother ball joints
+      new THREE.SphereGeometry(ballJointRadius, 16, 16),
       self.material
     );
     ball.position.copy(position);
@@ -97,7 +99,8 @@ var Pipe = function(scene, options) {
 
     // "elball" (not a proper elbow)
     var elball = new THREE.Mesh(
-      new THREE.SphereGeometry(pipeRadius, 8, 8),
+      // Match ball joint smoothness
+      new THREE.SphereGeometry(pipeRadius, 16, 16),
       self.material
     );
     elball.position.copy(fromPosition);
@@ -251,7 +254,11 @@ var renderer = new THREE.WebGLRenderer({
   antialias: true,
   canvas: canvasWebGL,
 });
+renderer.setPixelRatio(window.devicePixelRatio || 1);
 renderer.setSize(window.innerWidth, window.innerHeight);
+
+// camera distance chosen so we're well outside the pipe volume while still filling the viewport
+var CAMERA_DISTANCE = 26;
 
 // camera
 var camera = new THREE.PerspectiveCamera(
@@ -363,13 +370,15 @@ function animate() {
       jointType = jointsCycleArray[jointsCycleIndex++];
     }
     var pipeOptions = {
-      teapotChance: 1 / 200, // 1 / 1000 in the original
+      // Match the original Windows 3D Pipes teapot rarity.
+      teapotChance: 1 / 1000,
       ballJointChance:
         jointType === JOINTS_BALL ? 1 : jointType === JOINTS_MIXED ? 1 / 3 : 0,
       texturePath: options.texturePath,
     };
     if (chance(1 / 20)) {
-      pipeOptions.teapotChance = 1 / 20; // why not? :)
+      // Candy cane pipes: twice as likely as normal pipes
+      pipeOptions.teapotChance = 1 / 500;
       pipeOptions.texturePath = "images/textures/candycane.png";
       // TODO: DRY
       if (!textures[pipeOptions.texturePath]) {
@@ -442,27 +451,29 @@ function animate() {
   }
 
   speed = parseInt(document.querySelector('input[name="speed"]').value);
-        setTimeout( function() {
-          requestAnimationFrame( animate );
-        }, 1000 / speed );
+  setTimeout(function() {
+    requestAnimationFrame(animate);
+  }, 1000 / speed);
 }
 
 function look() {
   // TODO: never don't change the view (except maybe while clearing)
   if (chance(1 / 2)) {
     // head-on view
-
-    camera.position.set(0, 0, 14);
+    camera.position.set(0, 0, CAMERA_DISTANCE);
   } else {
     // random view
-
-    var vector = new THREE.Vector3(14, 0, 0);
+    var vector = new THREE.Vector3(CAMERA_DISTANCE, 0, 0);
 
     var axis = new THREE.Vector3(random(-1, 1), random(-1, 1), random(-1, 1));
     var angle = Math.PI / 2;
     var matrix = new THREE.Matrix4().makeRotationAxis(axis, angle);
 
     vector.applyMatrix4(matrix);
+    // keep the camera at or above the pipes so lighting looks good
+    if (vector.y < 0) {
+      vector.y = -vector.y;
+    }
     camera.position.copy(vector);
   }
   var center = new THREE.Vector3(0, 0, 0);
@@ -475,6 +486,7 @@ look();
 addEventListener(
   "resize",
   function() {
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
     renderer.setSize(window.innerWidth, window.innerHeight);
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -544,7 +556,12 @@ function updateFromParametersInURL() {
         params = null;
       }
     } catch (error) {
-      alert("Invalid URL parameter JSON syntax\n\n" + error + "\n\nRecieved:\n" + paramsJSON);
+      alert(
+        "Invalid URL parameter JSON syntax\n\n" +
+          error +
+          "\n\nRecieved:\n" +
+          paramsJSON
+      );
     }
   }
   params = params || {};
