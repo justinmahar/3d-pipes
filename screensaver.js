@@ -45,13 +45,25 @@ var Pipe = function(scene, options) {
       deltaVector.clone().normalize(),
       fromPoint
     );
-    // Higher segment counts for smoother pipes
+    // Segment counts depend on geometry quality
+    var radialSegments;
+    var heightSegments;
+    if (geometryQuality === "low") {
+      radialSegments = 8;
+      heightSegments = 3;
+    } else if (geometryQuality === "medium") {
+      radialSegments = 14;
+      heightSegments = 6;
+    } else {
+      radialSegments = 20;
+      heightSegments = 8;
+    }
     var geometry = new THREE.CylinderGeometry(
       pipeRadius,
       pipeRadius,
       deltaVector.length(),
-      20, // radialSegments
-      8, // heightSegments
+      radialSegments,
+      heightSegments,
       true
     );
     var mesh = new THREE.Mesh(geometry, material);
@@ -64,8 +76,12 @@ var Pipe = function(scene, options) {
   };
   var makeBallJoint = function(position) {
     var ball = new THREE.Mesh(
-      // More segments for smoother ball joints
-      new THREE.SphereGeometry(ballJointRadius, 16, 16),
+      // Segment counts depend on geometry quality
+      new THREE.SphereGeometry(
+        ballJointRadius,
+        geometryQuality === "low" ? 8 : geometryQuality === "medium" ? 12 : 16,
+        geometryQuality === "low" ? 8 : geometryQuality === "medium" ? 12 : 16
+      ),
       self.material
     );
     ball.position.copy(position);
@@ -99,8 +115,12 @@ var Pipe = function(scene, options) {
 
     // "elball" (not a proper elbow)
     var elball = new THREE.Mesh(
-      // Match ball joint smoothness
-      new THREE.SphereGeometry(pipeRadius, 16, 16),
+      // Match ball joint smoothness / performance
+      new THREE.SphereGeometry(
+        pipeRadius,
+        geometryQuality === "low" ? 8 : geometryQuality === "medium" ? 12 : 16,
+        geometryQuality === "low" ? 8 : geometryQuality === "medium" ? 12 : 16
+      ),
       self.material
     );
     elball.position.copy(fromPosition);
@@ -241,6 +261,27 @@ jointTypeSelect.addEventListener("change", function() {
   options.joints = jointTypeSelect.value;
 });
 
+// Quality controls
+var geometryQuality = "high"; // "low" | "medium" | "high"
+var resolutionScale = "retina"; // "normal" | "retina"
+
+var geometryQualitySelect = document.getElementById("geometry-quality");
+if (geometryQualitySelect) {
+  geometryQuality = geometryQualitySelect.value || geometryQuality;
+  geometryQualitySelect.addEventListener("change", function() {
+    geometryQuality = geometryQualitySelect.value || geometryQuality;
+  });
+}
+
+var resolutionScaleSelect = document.getElementById("resolution-scale");
+if (resolutionScaleSelect) {
+  resolutionScale = resolutionScaleSelect.value || resolutionScale;
+  resolutionScaleSelect.addEventListener("change", function() {
+    resolutionScale = resolutionScaleSelect.value || resolutionScale;
+    applyRendererSettings();
+  });
+}
+
 var canvasContainer = document.getElementById("canvas-container");
 
 // 2d canvas for dissolve effect
@@ -254,7 +295,14 @@ var renderer = new THREE.WebGLRenderer({
   antialias: true,
   canvas: canvasWebGL,
 });
-renderer.setPixelRatio(window.devicePixelRatio || 1);
+
+function applyRendererSettings() {
+  var pixelRatio =
+    resolutionScale === "retina" ? window.devicePixelRatio || 1 : 1;
+  renderer.setPixelRatio(pixelRatio);
+}
+
+applyRendererSettings();
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 // camera distance chosen so we're well outside the pipe volume while still filling the viewport
@@ -297,8 +345,9 @@ var dissolveEndCallback;
 function dissolve(seconds, endCallback) {
   // TODO: determine rect sizes better and simplify
   // (approximation of squares of a particular size)
-  // Use smaller tiles for a finer-grained dissolve effect.
-  var targetRectSize = 8; // px
+  // Tile size scales with geometry quality: higher quality → more, smaller tiles.
+  var targetRectSize =
+    geometryQuality === "low" ? 20 : geometryQuality === "medium" ? 12 : 8; // px
   dissolveRectsPerRow = Math.ceil(window.innerWidth / targetRectSize);
   dissolveRectsPerColumn = Math.ceil(window.innerHeight / targetRectSize);
 
@@ -489,7 +538,7 @@ look();
 addEventListener(
   "resize",
   function() {
-    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    applyRendererSettings();
     renderer.setSize(window.innerWidth, window.innerHeight);
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();

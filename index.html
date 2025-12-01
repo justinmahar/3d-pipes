@@ -72,6 +72,26 @@
           default="10"
           max="100"/></label
       ><br />
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
+        Geometry detail:
+        <select id="geometry-quality">
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high" selected>High</option>
+        </select>
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
+        Resolution:
+        <select id="resolution-scale">
+          <option value="normal">Normal</option>
+          <option value="retina" selected>Retina</option>
+        </select>
+      </label>
+      <br />
       <button id="toggle-controls">
         <span class="normal-controls-enabled">Control Camera</span>
         <span hidden class="orbit-controls-enabled">Relinquish Camera</span>
