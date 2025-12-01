@@ -149,6 +149,40 @@
       <label
         style="color: white; font-size: 13px; display: block; margin-top: 4px;"
       >
+        Fade curve:
+        <input
+          id="fade-curve"
+          type="range"
+          min="0.3"
+          max="3"
+          step="0.1"
+          value="1"
+        />
+        <span
+          id="fade-curve-display"
+          style="font-size: 12px; opacity: 0.85;"
+        ></span>
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
+        Fade stretch:
+        <input
+          id="fade-stretch"
+          type="range"
+          min="0.5"
+          max="20"
+          step="0.1"
+          value="1"
+        />
+        <span
+          id="fade-stretch-display"
+          style="font-size: 12px; opacity: 0.85;"
+        ></span>
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
         Dissolve granularity:
         <input
           id="dissolve-tile-size"
@@ -209,13 +243,14 @@
           />
         </label>
         <label style="display: block; margin-top: 2px;">
-          Candycane teapot chance: <span style="font-size: 12px;">1 in</span>
+          Special pipes teapot chance:
+          <span style="font-size: 12px;">1 in</span>
           <input
             id="candycane-teapot-denom"
             type="number"
             min="1"
             step="1"
-            value="500"
+            value="100"
             style="width: 70px;"
           />
         </label>

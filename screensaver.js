@@ -452,6 +452,8 @@ var options = {
   multiColorRandomPipeChance: 1 / 500,
   transitionDuration: 1.2,
   transitionDelay: 0,
+  fadeCurve: 1,
+  fadeStretch: 1,
   useFastManualTransitions: true,
   transitionType: "dissolve", // "dissolve" or "fade"
 };
@@ -514,6 +516,10 @@ var transitionDelayInput = document.getElementById("transition-delay");
 var transitionDelayDisplay = document.getElementById(
   "transition-delay-display"
 );
+var fadeCurveInput = document.getElementById("fade-curve");
+var fadeCurveDisplay = document.getElementById("fade-curve-display");
+var fadeStretchInput = document.getElementById("fade-stretch");
+var fadeStretchDisplay = document.getElementById("fade-stretch-display");
 var transitionTypeRadios = document.querySelectorAll(
   'input[name="transition-type"]'
 );
@@ -643,6 +649,58 @@ function updateTransitionDelayFromUI() {
 
 if (transitionDelayInput) {
   transitionDelayInput.addEventListener("input", updateTransitionDelayFromUI);
+}
+
+function updateFadeCurveFromUI() {
+  if (!fadeCurveInput) return;
+  var v = parseFloat(fadeCurveInput.value);
+  if (!isFinite(v) || v <= 0) {
+    v = 1;
+  }
+  options.fadeCurve = v;
+  if (fadeCurveDisplay) {
+    var label;
+    if (v < 0.8) {
+      label = "aggressive (fades fast)";
+    } else if (v < 1.2) {
+      label = "linear";
+    } else if (v < 2) {
+      label = "gentle (slower fade)";
+    } else {
+      label = "very gentle";
+    }
+    fadeCurveDisplay.textContent = v.toFixed(1) + " (" + label + ")";
+  }
+}
+
+if (fadeCurveInput) {
+  fadeCurveInput.addEventListener("input", updateFadeCurveFromUI);
+}
+
+function updateFadeStretchFromUI() {
+  if (!fadeStretchInput) return;
+  var v = parseFloat(fadeStretchInput.value);
+  if (!isFinite(v) || v <= 0) {
+    v = 1;
+  }
+  options.fadeStretch = v;
+  if (fadeStretchDisplay) {
+    var label;
+    if (v < 1) {
+      label = "compressed";
+    } else if (v === 1) {
+      label = "normal";
+    } else if (v <= 2) {
+      label = "stretched";
+    } else {
+      label = "very stretched";
+    }
+    fadeStretchDisplay.textContent = v.toFixed(1) + "x (" + label + ")";
+  }
+}
+
+if (fadeStretchInput) {
+  fadeStretchInput.addEventListener("input", updateFadeStretchFromUI);
 }
 
 if (transitionTypeRadios && transitionTypeRadios.length) {
@@ -862,14 +920,16 @@ function stepOnce() {
       jointType = jointsCycleArray[jointsCycleIndex++];
     }
     var basePipeOptions = {
+      // "Normal" pipes teapot rarity; special pipes (candycane, multicolor)
+      // can override this to use the special teapot chance instead.
       teapotChance: options.baseTeapotChance,
       ballJointChance:
         jointType === JOINTS_BALL ? 1 : jointType === JOINTS_MIXED ? 1 / 3 : 0,
       texturePath: options.texturePath,
     };
-    // Chance that this pipe becomes a candy cane pipe
+    // Chance that this pipe becomes a candy cane pipe (a type of special pipe)
     if (chance(options.candyCanePipeChance)) {
-      // Candy cane pipes: higher teapot chance than normal pipes
+      // Candy cane pipes: use the special-pipe teapot chance
       basePipeOptions.teapotChance = options.candyCaneTeapotChance;
       basePipeOptions.texturePath = "images/textures/candycane.png";
       // TODO: DRY
@@ -896,7 +956,10 @@ function stepOnce() {
           pipeOptions.colorMode = "random";
         }
         if (pipeOptions.colorMode !== "normal") {
-          // multicolor pipes use solid colors, not textures
+          // multicolor pipes are also "special pipes":
+          // - use special-pipe teapot chance
+          // - use solid colors, not textures
+          pipeOptions.teapotChance = options.candyCaneTeapotChance;
           pipeOptions.texturePath = null;
         }
       }
@@ -923,16 +986,24 @@ function updateDissolveLayer() {
       canvas2d.height = window.innerHeight;
     }
     var elapsed = (performance.now() - dissolveStartTime) / 1000;
-    var t = Math.min(
-      1,
-      dissolveTransitionSeconds > 0 ? elapsed / dissolveTransitionSeconds : 1
-    );
+    var duration =
+      dissolveTransitionSeconds > 0 ? dissolveTransitionSeconds : 1;
+    var baseLinear = Math.min(1, elapsed / duration);
+    var stretch = options.fadeStretch || 1;
+    if (stretch <= 0) stretch = 1;
+    // Stretch the logical fade curve in time, but cut it off at baseLinear = 1
+    var stretchedInput = Math.min(1, baseLinear / stretch);
+    var curve = options.fadeCurve || 1;
+    if (curve <= 0) curve = 1;
+    var t = Math.pow(stretchedInput, curve);
     ctx2d.save();
     ctx2d.globalAlpha = t;
     ctx2d.fillStyle = "black";
     ctx2d.fillRect(0, 0, canvas2d.width, canvas2d.height);
     ctx2d.restore();
-    if (t >= 1) {
+    // Always end the transition once the configured duration has elapsed,
+    // even if the stretched curve hasn't reached full black yet.
+    if (baseLinear >= 1) {
       finishDissolve();
     }
     return;
@@ -965,12 +1036,15 @@ function updateDissolveLayer() {
   if (dissolveRectsIndex > -1) {
     // Time-based progression: fill tiles according to elapsed fraction
     var elapsedSeconds = (performance.now() - dissolveStartTime) / 1000;
-    var t2 = Math.min(
-      1,
-      dissolveTransitionSeconds > 0
-        ? elapsedSeconds / dissolveTransitionSeconds
-        : 1
-    );
+    var duration2 =
+      dissolveTransitionSeconds > 0 ? dissolveTransitionSeconds : 1;
+    var baseLinear2 = Math.min(1, elapsedSeconds / duration2);
+    var stretch2 = options.fadeStretch || 1;
+    if (stretch2 <= 0) stretch2 = 1;
+    var stretchedInput2 = Math.min(1, baseLinear2 / stretch2);
+    var curve2 = options.fadeCurve || 1;
+    if (curve2 <= 0) curve2 = 1;
+    var t2 = Math.pow(stretchedInput2, curve2);
     var targetIndex = Math.floor(t2 * dissolveRects.length);
     while (
       dissolveRectsIndex < targetIndex &&
@@ -989,7 +1063,7 @@ function updateDissolveLayer() {
       );
       dissolveRectsIndex += 1;
     }
-    if (t2 >= 1 || dissolveRectsIndex === dissolveRects.length) {
+    if (baseLinear2 >= 1 || dissolveRectsIndex === dissolveRects.length) {
       finishDissolve();
     }
   }
@@ -1174,6 +1248,8 @@ updateTeapotChancesFromUI();
 updateDissolveTileSizeFromUI();
 updateTransitionDurationFromUI();
 updateTransitionDelayFromUI();
+updateFadeCurveFromUI();
+updateFadeStretchFromUI();
 animate();
 
 /**************\
