@@ -456,6 +456,10 @@ var options = {
   fadeStretch: 1,
   useFastManualTransitions: true,
   transitionType: "dissolve", // "dissolve" or "fade"
+  initialVanillaScenes: 5,
+  sceneIndex: 0,
+  fpsCutoffEnabled: false,
+  fpsCutoffValue: 20,
 };
 jointTypeSelect.addEventListener("change", function() {
   options.joints = jointTypeSelect.value;
@@ -520,12 +524,17 @@ var fadeCurveInput = document.getElementById("fade-curve");
 var fadeCurveDisplay = document.getElementById("fade-curve-display");
 var fadeStretchInput = document.getElementById("fade-stretch");
 var fadeStretchDisplay = document.getElementById("fade-stretch-display");
+var initialVanillaScenesInput = document.getElementById(
+  "initial-vanilla-scenes"
+);
 var transitionTypeRadios = document.querySelectorAll(
   'input[name="transition-type"]'
 );
 var showFPSInput = document.getElementById("show-fps");
 var fpsDisplayEl = document.getElementById("fps-display");
 var fastManualInput = document.getElementById("fast-manual-transitions");
+var fpsCutoffEnabledInput = document.getElementById("fps-cutoff-enabled");
+var fpsCutoffValueInput = document.getElementById("fps-cutoff-value");
 
 function updateTeapotChancesFromUI() {
   function denomToChance(inputEl, fallback) {
@@ -703,6 +712,22 @@ if (fadeStretchInput) {
   fadeStretchInput.addEventListener("input", updateFadeStretchFromUI);
 }
 
+function updateInitialVanillaScenesFromUI() {
+  if (!initialVanillaScenesInput) return;
+  var v = parseInt(initialVanillaScenesInput.value, 10);
+  if (!isFinite(v) || v < 0) {
+    v = 0;
+  }
+  options.initialVanillaScenes = v;
+}
+
+if (initialVanillaScenesInput) {
+  initialVanillaScenesInput.addEventListener(
+    "change",
+    updateInitialVanillaScenesFromUI
+  );
+}
+
 if (transitionTypeRadios && transitionTypeRadios.length) {
   transitionTypeRadios.forEach(function(radio) {
     if (radio.checked) {
@@ -737,6 +762,26 @@ if (fastManualInput) {
   options.useFastManualTransitions = !!fastManualInput.checked;
   fastManualInput.addEventListener("change", function() {
     options.useFastManualTransitions = !!fastManualInput.checked;
+  });
+}
+
+if (fpsCutoffEnabledInput) {
+  options.fpsCutoffEnabled = !!fpsCutoffEnabledInput.checked;
+  fpsCutoffEnabledInput.addEventListener("change", function() {
+    options.fpsCutoffEnabled = !!fpsCutoffEnabledInput.checked;
+  });
+}
+
+if (fpsCutoffValueInput) {
+  var v = parseInt(fpsCutoffValueInput.value, 10);
+  if (isFinite(v) && v > 0) {
+    options.fpsCutoffValue = v;
+  }
+  fpsCutoffValueInput.addEventListener("change", function() {
+    var newVal = parseInt(fpsCutoffValueInput.value, 10);
+    if (isFinite(newVal) && newVal > 0) {
+      options.fpsCutoffValue = newVal;
+    }
   });
 }
 
@@ -897,6 +942,8 @@ function reset() {
   pipes = [];
   clearGrid();
   look();
+  // increment scene index after each full clear; used for "intro vanilla" scenes
+  options.sceneIndex = (options.sceneIndex || 0) + 1;
   clearing = false;
 }
 
@@ -915,6 +962,8 @@ function stepOnce() {
     pipes[i].update(scene);
   }
   if (pipes.length === 0) {
+    var inIntroVanillaPhase =
+      (options.sceneIndex || 0) < (options.initialVanillaScenes || 0);
     var jointType = options.joints;
     if (options.joints === JOINTS_CYCLE) {
       jointType = jointsCycleArray[jointsCycleIndex++];
@@ -922,13 +971,13 @@ function stepOnce() {
     var basePipeOptions = {
       // "Normal" pipes teapot rarity; special pipes (candycane, multicolor)
       // can override this to use the special teapot chance instead.
-      teapotChance: options.baseTeapotChance,
+      teapotChance: inIntroVanillaPhase ? 0 : options.baseTeapotChance,
       ballJointChance:
         jointType === JOINTS_BALL ? 1 : jointType === JOINTS_MIXED ? 1 / 3 : 0,
       texturePath: options.texturePath,
     };
     // Chance that this pipe becomes a candy cane pipe (a type of special pipe)
-    if (chance(options.candyCanePipeChance)) {
+    if (!inIntroVanillaPhase && chance(options.candyCanePipeChance)) {
       // Candy cane pipes: use the special-pipe teapot chance
       basePipeOptions.teapotChance = options.candyCaneTeapotChance;
       basePipeOptions.texturePath = "images/textures/candycane.png";
@@ -949,7 +998,7 @@ function stepOnce() {
         texturePath: basePipeOptions.texturePath,
         colorMode: "normal",
       };
-      if (options.multiColorEnabled) {
+      if (!inIntroVanillaPhase && options.multiColorEnabled) {
         if (chance(options.multiColorSchemePipeChance)) {
           pipeOptions.colorMode = "scheme";
         } else if (chance(options.multiColorRandomPipeChance)) {
@@ -1086,17 +1135,26 @@ function animate() {
   // keep UI display in sync
   updateSpeedDisplay();
 
-  // FPS display (render loop FPS, not simulation speed)
+  // FPS display (render loop FPS, not simulation speed) and cutoff
   framesSinceFpsSample += 1;
-  if (fpsDisplayEl && showFPSInput && showFPSInput.checked) {
-    var now = performance.now();
-    var dt = now - lastFpsSampleTime;
-    if (dt >= 250) {
-      var fps = (framesSinceFpsSample * 1000) / dt;
+  var now = performance.now();
+  var dt = now - lastFpsSampleTime;
+  if (dt >= 250) {
+    var fps = (framesSinceFpsSample * 1000) / dt;
+    // Update on-screen FPS meter
+    if (fpsDisplayEl && showFPSInput && showFPSInput.checked) {
       fpsDisplayEl.textContent = fps.toFixed(0) + " FPS";
-      lastFpsSampleTime = now;
-      framesSinceFpsSample = 0;
     }
+    // FPS cutoff: if enabled and we're below the threshold, jump to next scene
+    if (
+      options.fpsCutoffEnabled &&
+      fps < (options.fpsCutoffValue || 0) &&
+      !clearing
+    ) {
+      clear(true);
+    }
+    lastFpsSampleTime = now;
+    framesSinceFpsSample = 0;
   }
 
   if (!paused) {
@@ -1257,6 +1315,7 @@ updateTransitionDurationFromUI();
 updateTransitionDelayFromUI();
 updateFadeCurveFromUI();
 updateFadeStretchFromUI();
+updateInitialVanillaScenesFromUI();
 animate();
 
 /**************\

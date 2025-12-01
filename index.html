@@ -102,6 +102,26 @@
       <label
         style="color: white; font-size: 13px; display: block; margin-top: 4px;"
       >
+        FPS safety cutoff:
+        <input
+          id="fps-cutoff-enabled"
+          type="checkbox"
+          style="margin-left: 4px; margin-right: 4px;"
+        />
+        below
+        <input
+          id="fps-cutoff-value"
+          type="number"
+          min="1"
+          step="1"
+          value="20"
+          style="width: 60px; margin-left: 4px;"
+        />
+        FPS → skip to next scene
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
         Transition type:
         <label style="margin-left: 8px; font-weight: normal;">
           <input type="radio" name="transition-type" value="fade" checked />
@@ -196,6 +216,19 @@
           id="dissolve-tile-size-display"
           style="font-size: 12px; opacity: 0.85;"
         ></span>
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
+        Intro vanilla scenes: <span style="font-size: 12px;">count</span>
+        <input
+          id="initial-vanilla-scenes"
+          type="number"
+          min="0"
+          step="1"
+          value="5"
+          style="width: 60px; margin-left: 4px;"
+        />
       </label>
       <label
         style="color: white; font-size: 13px; display: block; margin-top: 4px;"
