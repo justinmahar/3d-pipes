@@ -1092,7 +1092,11 @@ function updateSnow(dtSeconds) {
   }
 
   var shouldBeVisible =
-    options.snowEnabled && options.isCandyScene && !clearing && !paused;
+    options.snowEnabled &&
+    options.isCandyScene &&
+    !clearing &&
+    !paused &&
+    pipes.length > 0;
   snowPoints.visible = shouldBeVisible;
   if (!shouldBeVisible) {
     return;
