@@ -1053,7 +1053,9 @@ function rebuildSnowSystem() {
   for (var i = 0; i < count; i++) {
     var idx3 = i * 3;
     positions[idx3] = random(-snowAreaHalfSize, snowAreaHalfSize);
-    positions[idx3 + 1] = random(0, snowYTop);
+    // Seed flakes throughout the whole snow volume so it doesn't start
+    // with a clear gap under the top band.
+    positions[idx3 + 1] = random(snowYBottom, snowYTop);
     positions[idx3 + 2] = random(-snowAreaHalfSize, snowAreaHalfSize);
     snowVelocities[i] = random(0.3, 1.0);
     colors[idx3] = 1;
