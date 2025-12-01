@@ -308,6 +308,7 @@ var jointsCycleIndex = 0;
 var jointTypeSelect = document.getElementById("joint-types");
 
 var pipes = [];
+var paused = false;
 var options = {
   multiple: true,
   texturePath: null,
@@ -750,8 +751,10 @@ function animate() {
   // keep UI display in sync
   updateSpeedDisplay();
 
-  for (var s = 0; s < steps; s++) {
-    stepOnce();
+  if (!paused) {
+    for (var s = 0; s < steps; s++) {
+      stepOnce();
+    }
   }
 
   // progress dissolve effect once per browser frame, independent of speed
@@ -832,6 +835,26 @@ fullscreenButton.addEventListener(
     } else if (canvasContainer.webkitRequestFullScreen) {
       // Webkit current API
       canvasContainer.webkitRequestFullScreen();
+    }
+  },
+  false
+);
+
+// keyboard controls: R to clear, Space to pause/resume
+window.addEventListener(
+  "keydown",
+  function(e) {
+    // avoid stealing input focus from form elements
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+      return;
+    }
+    if (e.code === "KeyR") {
+      e.preventDefault();
+      clear(true);
+    } else if (e.code === "Space") {
+      e.preventDefault();
+      paused = !paused;
     }
   },
   false
