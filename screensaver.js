@@ -21,6 +21,12 @@ var Pipe = function(scene, options) {
   var ballJointRadius = pipeRadius * 1.5;
   var teapotSize = ballJointRadius;
 
+  // How many animation frames new geometry takes to grow in.
+  var SEGMENT_GROW_FRAMES = 8;
+  var JOINT_GROW_FRAMES = 6;
+
+  self.growingParts = [];
+
   self.currentPosition = randomIntegerVector3WithinBox(gridBounds);
   self.positions = [self.currentPosition];
   self.object3d = new THREE.Object3D();
@@ -38,6 +44,20 @@ var Pipe = function(scene, options) {
       emissive: emissive,
       shininess: 100,
     });
+  }
+  function scheduleGrow(mesh, type) {
+    mesh.userData.growType = type;
+    mesh.userData.growProgress = 0;
+    if (type === "segment") {
+      // Grow along length only; radius stays full size.
+      mesh.scale.set(1, 0.01, 1);
+      mesh.userData.growFrames = SEGMENT_GROW_FRAMES;
+    } else {
+      // Joints grow uniformly from a point.
+      mesh.scale.set(0.01, 0.01, 0.01);
+      mesh.userData.growFrames = JOINT_GROW_FRAMES;
+    }
+    self.growingParts.push(mesh);
   }
   var makeCylinderBetweenPoints = function(fromPoint, toPoint, material) {
     var deltaVector = new THREE.Vector3().subVectors(toPoint, fromPoint);
@@ -58,21 +78,26 @@ var Pipe = function(scene, options) {
       radialSegments = 20;
       heightSegments = 8;
     }
+    var length = deltaVector.length();
     var geometry = new THREE.CylinderGeometry(
       pipeRadius,
       pipeRadius,
-      deltaVector.length(),
+      length,
       radialSegments,
       heightSegments,
       true
     );
+    // Move geometry so its base is at y=0 and it extends in +Y.
+    geometry.translate(0, length / 2, 0);
     var mesh = new THREE.Mesh(geometry, material);
 
     mesh.rotation.setFromQuaternion(arrow.quaternion);
-    mesh.position.addVectors(fromPoint, deltaVector.multiplyScalar(0.5));
+    // Anchor the base at fromPoint so the segment can grow outward.
+    mesh.position.copy(fromPoint);
     mesh.updateMatrix();
 
     self.object3d.add(mesh);
+    scheduleGrow(mesh, "segment");
   };
   var makeBallJoint = function(position) {
     var ball = new THREE.Mesh(
@@ -86,6 +111,7 @@ var Pipe = function(scene, options) {
     );
     ball.position.copy(position);
     self.object3d.add(ball);
+    scheduleGrow(ball, "joint");
   };
   var makeTeapotJoint = function(position) {
     //var teapotTexture = textures[options.texturePath].clone();
@@ -102,6 +128,7 @@ var Pipe = function(scene, options) {
     teapot.rotation.y = (Math.floor(random(0, 50)) * Math.PI) / 2;
     teapot.rotation.z = (Math.floor(random(0, 50)) * Math.PI) / 2;
     self.object3d.add(teapot);
+    scheduleGrow(teapot, "joint");
   };
   var makeElbowJoint = function(fromPosition, toPosition, tangentVector) {
     // elbow
@@ -125,6 +152,7 @@ var Pipe = function(scene, options) {
     );
     elball.position.copy(fromPosition);
     self.object3d.add(elball);
+    scheduleGrow(elball, "joint");
 
     // extrude an elbow joint
 
@@ -178,6 +206,35 @@ var Pipe = function(scene, options) {
   makeBallJoint(self.currentPosition);
 
   self.update = function() {
+    // Animate any newly added meshes growing in.
+    // While anything is still growing, we hold off on creating new segments
+    // so the pipe appears to grow smoothly, one piece at a time.
+    if (self.growingParts.length > 0) {
+      var stillGrowing = false;
+      for (var i = self.growingParts.length - 1; i >= 0; i--) {
+        var mesh = self.growingParts[i];
+        mesh.userData.growProgress += 1;
+        var t = mesh.userData.growProgress / mesh.userData.growFrames;
+        if (t >= 1) {
+          mesh.scale.set(1, 1, 1);
+          self.growingParts.splice(i, 1);
+        } else {
+          // ease-out growth
+          var eased = 1 - Math.pow(1 - t, 2);
+          if (mesh.userData.growType === "segment") {
+            var sy = 0.01 + (1 - 0.01) * eased;
+            mesh.scale.y = sy;
+          } else {
+            var s = 0.01 + (1 - 0.01) * eased;
+            mesh.scale.set(s, s, s);
+          }
+          stillGrowing = true;
+        }
+      }
+      if (stillGrowing) {
+        return;
+      }
+    }
     if (self.positions.length > 1) {
       var lastPosition = self.positions[self.positions.length - 2];
       var lastDirectionVector = new THREE.Vector3().subVectors(
@@ -280,6 +337,21 @@ if (resolutionScaleSelect) {
     resolutionScale = resolutionScaleSelect.value || resolutionScale;
     applyRendererSettings();
   });
+}
+
+// Speed control elements
+var speedInputEl = document.querySelector('input[name="speed"]');
+var speedDisplayEl = document.getElementById("speed-display");
+
+function updateSpeedDisplay() {
+  if (!speedInputEl || !speedDisplayEl) return;
+  var raw = parseInt(speedInputEl.value, 10) || 1;
+  var steps = Math.max(1, Math.round(raw / 10));
+  speedDisplayEl.textContent = raw + " (" + steps + "x)";
+}
+
+if (speedInputEl) {
+  speedInputEl.addEventListener("input", updateSpeedDisplay);
 }
 
 var canvasContainer = document.getElementById("canvas-container");
@@ -404,7 +476,8 @@ function reset() {
 }
 
 // this function is executed on each animation frame
-function animate() {
+// Advance the simulation and rendering by one logical step.
+function stepOnce() {
   controls.update();
   if (options.texturePath && !textures[options.texturePath]) {
     var texture = THREE.ImageUtils.loadTexture(options.texturePath);
@@ -501,11 +574,23 @@ function animate() {
       finishDissolve();
     }
   }
+}
 
-  speed = parseInt(document.querySelector('input[name="speed"]').value);
-  setTimeout(function() {
-    requestAnimationFrame(animate);
-  }, 1000 / speed);
+function animate() {
+  var speedValue = speedInputEl ? parseInt(speedInputEl.value, 10) || 1 : 1;
+
+  // Map slider 1–200 to how many simulation steps we run per animation frame.
+  // ~10 → 1x, 50 → 5x, 100 → 10x, 200 → 20x.
+  var steps = Math.max(1, Math.round(speedValue / 10));
+
+  // keep UI display in sync
+  updateSpeedDisplay();
+
+  for (var s = 0; s < steps; s++) {
+    stepOnce();
+  }
+
+  requestAnimationFrame(animate);
 }
 
 function look() {
@@ -626,7 +711,8 @@ function updateFromParametersInURL() {
 updateFromParametersInURL();
 window.addEventListener("hashchange", updateFromParametersInURL);
 
-// start animation
+// initialize UI displays and start animation
+updateSpeedDisplay();
 animate();
 
 /**************\
