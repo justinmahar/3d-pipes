@@ -26,6 +26,20 @@ var Pipe = function(scene, options) {
   var JOINT_GROW_FRAMES = 6;
 
   self.growingParts = [];
+  self.colorMode = options.colorMode || "normal"; // "normal" | "scheme" | "random"
+  self.colorScheme = null;
+  self.palette = null;
+  self.paletteIndex = 0;
+  if (self.colorMode === "scheme") {
+    self.colorScheme = chooseFrom([
+      "red",
+      "green",
+      "blue",
+      "purple",
+      "yellow",
+      "cyan",
+    ]);
+  }
 
   self.currentPosition = randomIntegerVector3WithinBox(gridBounds);
   self.positions = [self.currentPosition];
@@ -39,6 +53,92 @@ var Pipe = function(scene, options) {
     var color = randomInteger(0, 0xffffff);
     var emissive = new THREE.Color(color).multiplyScalar(0.3);
     self.material = new THREE.MeshPhongMaterial({
+      specular: 0xa9fcff,
+      color: color,
+      emissive: emissive,
+      shininess: 100,
+    });
+  }
+  function randomColorInScheme(scheme) {
+    var r, g, b;
+    if (scheme === "red") {
+      r = randomInteger(200, 255);
+      g = randomInteger(0, 60);
+      b = randomInteger(0, 60);
+    } else if (scheme === "green") {
+      r = randomInteger(0, 60);
+      g = randomInteger(180, 255);
+      b = randomInteger(0, 60);
+    } else if (scheme === "blue") {
+      r = randomInteger(0, 50);
+      g = randomInteger(0, 70);
+      b = randomInteger(190, 255);
+    } else if (scheme === "purple") {
+      r = randomInteger(150, 230);
+      g = randomInteger(0, 50);
+      b = randomInteger(190, 255);
+    } else if (scheme === "yellow") {
+      r = randomInteger(230, 255);
+      g = randomInteger(200, 255);
+      b = randomInteger(0, 60);
+    } else if (scheme === "cyan") {
+      r = randomInteger(0, 60);
+      g = randomInteger(190, 255);
+      b = randomInteger(190, 255);
+    } else {
+      // fallback to fully random
+      r = randomInteger(0, 255);
+      g = randomInteger(0, 255);
+      b = randomInteger(0, 255);
+    }
+    return (r << 16) | (g << 8) | b;
+  }
+
+  function buildPalette() {
+    if (self.colorMode === "normal") {
+      self.palette = null;
+      return;
+    }
+    var palette = [];
+    if (self.colorMode === "scheme") {
+      // Two high-contrast colors within the same scheme for a striped look
+      var base = randomColorInScheme(self.colorScheme);
+      var alt = randomColorInScheme(self.colorScheme);
+      // ensure noticeably different: re-roll alt until far enough in RGB space
+      var tries = 0;
+      while (tries < 10) {
+        var dr = ((base >> 16) & 0xff) - ((alt >> 16) & 0xff);
+        var dg = ((base >> 8) & 0xff) - ((alt >> 8) & 0xff);
+        var db = (base & 0xff) - (alt & 0xff);
+        var distSq = dr * dr + dg * dg + db * db;
+        if (distSq > 80 * 80) {
+          break;
+        }
+        alt = randomColorInScheme(self.colorScheme);
+        tries++;
+      }
+      palette.push(base, alt);
+    } else if (self.colorMode === "random") {
+      // 2–10 distinct random colors, cycled for a rainbow-like effect
+      var count = randomInteger(2, 10);
+      for (var i = 0; i < count; i++) {
+        palette.push(randomInteger(0, 0xffffff));
+      }
+    }
+    self.palette = palette;
+    self.paletteIndex = 0;
+  }
+
+  buildPalette();
+
+  function createPieceMaterial() {
+    if (self.colorMode === "normal" || !self.palette || !self.palette.length) {
+      return self.material;
+    }
+    var color = self.palette[self.paletteIndex % self.palette.length];
+    self.paletteIndex += 1;
+    var emissive = new THREE.Color(color).multiplyScalar(0.3);
+    return new THREE.MeshPhongMaterial({
       specular: 0xa9fcff,
       color: color,
       emissive: emissive,
@@ -89,7 +189,10 @@ var Pipe = function(scene, options) {
     );
     // Move geometry so its base is at y=0 and it extends in +Y.
     geometry.translate(0, length / 2, 0);
-    var mesh = new THREE.Mesh(geometry, material);
+    var mesh = new THREE.Mesh(
+      geometry,
+      self.colorMode === "normal" ? material : createPieceMaterial()
+    );
 
     mesh.rotation.setFromQuaternion(arrow.quaternion);
     // Anchor the base at fromPoint so the segment can grow outward.
@@ -107,7 +210,7 @@ var Pipe = function(scene, options) {
         geometryQuality === "low" ? 8 : geometryQuality === "medium" ? 12 : 16,
         geometryQuality === "low" ? 8 : geometryQuality === "medium" ? 12 : 16
       ),
-      self.material
+      createPieceMaterial()
     );
     ball.position.copy(position);
     self.object3d.add(ball);
@@ -120,7 +223,7 @@ var Pipe = function(scene, options) {
     // THREE.TeapotBufferGeometry = function ( size, segments, bottom, lid, body, fitLid, blinn )
     var teapot = new THREE.Mesh(
       new THREE.TeapotBufferGeometry(teapotSize, true, true, true, true, true),
-      self.material
+      createPieceMaterial()
       //new THREE.MeshLambertMaterial({ map: teapotTexture })
     );
     teapot.position.copy(position);
@@ -148,7 +251,7 @@ var Pipe = function(scene, options) {
         geometryQuality === "low" ? 8 : geometryQuality === "medium" ? 12 : 16,
         geometryQuality === "low" ? 8 : geometryQuality === "medium" ? 12 : 16
       ),
-      self.material
+      createPieceMaterial()
     );
     elball.position.copy(fromPosition);
     self.object3d.add(elball);
@@ -317,6 +420,10 @@ var options = {
   baseTeapotChance: 1 / 1000,
   candyCanePipeChance: 1 / 200,
   candyCaneTeapotChance: 1 / 500,
+  // multicolor pipes: at most one multicolor pipe per set of pipes
+  multiColorEnabled: false,
+  multiColorSchemePipeChance: 1 / 1000,
+  multiColorRandomPipeChance: 1 / 500,
   transitionDuration: 1.2,
   transitionType: "dissolve", // "dissolve" or "fade"
 };
@@ -360,10 +467,13 @@ if (speedInputEl) {
   speedInputEl.addEventListener("input", updateSpeedDisplay);
 }
 
-// Teapot / candycane controls
+// Teapot / candycane / multicolor controls
 var baseTeapotInput = document.getElementById("base-teapot-denom");
 var candycanePipeInput = document.getElementById("candycane-pipe-denom");
 var candycaneTeapotInput = document.getElementById("candycane-teapot-denom");
+var multiColorEnabledInput = document.getElementById("multicolor-enabled");
+var multiColorSchemeInput = document.getElementById("multicolor-scheme-denom");
+var multiColorRandomInput = document.getElementById("multicolor-random-denom");
 var dissolveTileSizeInput = document.getElementById("dissolve-tile-size");
 var dissolveTileSizeDisplay = document.getElementById(
   "dissolve-tile-size-display"
@@ -395,6 +505,17 @@ function updateTeapotChancesFromUI() {
     candycaneTeapotInput,
     options.candyCaneTeapotChance
   );
+  options.multiColorSchemePipeChance = denomToChance(
+    multiColorSchemeInput,
+    options.multiColorSchemePipeChance
+  );
+  options.multiColorRandomPipeChance = denomToChance(
+    multiColorRandomInput,
+    options.multiColorRandomPipeChance
+  );
+  if (multiColorEnabledInput) {
+    options.multiColorEnabled = !!multiColorEnabledInput.checked;
+  }
 }
 
 if (baseTeapotInput) {
@@ -405,6 +526,15 @@ if (candycanePipeInput) {
 }
 if (candycaneTeapotInput) {
   candycaneTeapotInput.addEventListener("change", updateTeapotChancesFromUI);
+}
+if (multiColorSchemeInput) {
+  multiColorSchemeInput.addEventListener("change", updateTeapotChancesFromUI);
+}
+if (multiColorRandomInput) {
+  multiColorRandomInput.addEventListener("change", updateTeapotChancesFromUI);
+}
+if (multiColorEnabledInput) {
+  multiColorEnabledInput.addEventListener("change", updateTeapotChancesFromUI);
 }
 
 function updateDissolveTileSizeFromUI() {
@@ -631,7 +761,7 @@ function stepOnce() {
     if (options.joints === JOINTS_CYCLE) {
       jointType = jointsCycleArray[jointsCycleIndex++];
     }
-    var pipeOptions = {
+    var basePipeOptions = {
       teapotChance: options.baseTeapotChance,
       ballJointChance:
         jointType === JOINTS_BALL ? 1 : jointType === JOINTS_MIXED ? 1 / 3 : 0,
@@ -640,18 +770,38 @@ function stepOnce() {
     // Chance that this pipe becomes a candy cane pipe
     if (chance(options.candyCanePipeChance)) {
       // Candy cane pipes: higher teapot chance than normal pipes
-      pipeOptions.teapotChance = options.candyCaneTeapotChance;
-      pipeOptions.texturePath = "images/textures/candycane.png";
+      basePipeOptions.teapotChance = options.candyCaneTeapotChance;
+      basePipeOptions.texturePath = "images/textures/candycane.png";
       // TODO: DRY
-      if (!textures[pipeOptions.texturePath]) {
-        var texture = THREE.ImageUtils.loadTexture(pipeOptions.texturePath);
+      if (!textures[basePipeOptions.texturePath]) {
+        var texture = THREE.ImageUtils.loadTexture(basePipeOptions.texturePath);
         texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
         texture.repeat.set(2, 2);
-        textures[pipeOptions.texturePath] = texture;
+        textures[basePipeOptions.texturePath] = texture;
       }
     }
     // TODO: create new pipes over time?
-    for (var i = 0; i < 1 + options.multiple * (1 + chance(1 / 10)); i++) {
+    var pipeCount = 1 + options.multiple * (1 + chance(1 / 10));
+    var multiColorAssigned = false;
+    for (var i = 0; i < pipeCount; i++) {
+      var pipeOptions = {
+        teapotChance: basePipeOptions.teapotChance,
+        ballJointChance: basePipeOptions.ballJointChance,
+        texturePath: basePipeOptions.texturePath,
+        colorMode: "normal",
+      };
+      if (options.multiColorEnabled && !multiColorAssigned) {
+        if (chance(options.multiColorSchemePipeChance)) {
+          pipeOptions.colorMode = "scheme";
+        } else if (chance(options.multiColorRandomPipeChance)) {
+          pipeOptions.colorMode = "random";
+        }
+        if (pipeOptions.colorMode !== "normal") {
+          // multicolor pipes use solid colors, not textures
+          pipeOptions.texturePath = null;
+          multiColorAssigned = true;
+        }
+      }
       pipes.push(new Pipe(scene, pipeOptions));
     }
   }

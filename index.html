@@ -186,6 +186,41 @@
             style="width: 70px;"
           />
         </label>
+        <div style="margin-top: 4px; font-weight: 500;">Multicolor Pipes</div>
+        <label
+          style="
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 2px;
+          "
+        >
+          <input id="multicolor-enabled" type="checkbox" /> Enable multicolor
+          pipes
+        </label>
+        <label style="display: block; margin-top: 2px;">
+          Scheme multicolor chance: <span style="font-size: 12px;">1 in</span>
+          <input
+            id="multicolor-scheme-denom"
+            type="number"
+            min="1"
+            step="1"
+            value="1000"
+            style="width: 70px;"
+          />
+        </label>
+        <label style="display: block; margin-top: 2px;">
+          Fully random multicolor chance:
+          <span style="font-size: 12px;">1 in</span>
+          <input
+            id="multicolor-random-denom"
+            type="number"
+            min="1"
+            step="1"
+            value="500"
+            style="width: 70px;"
+          />
+        </label>
       </div>
       <br />
       <button id="toggle-controls">
