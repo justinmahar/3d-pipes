@@ -34,6 +34,7 @@ var Pipe = function(scene, options) {
   self.colorScheme = null;
   self.palette = null;
   self.paletteIndex = 0;
+  self.stuckDecorated = false;
   if (self.colorMode === "scheme") {
     self.colorScheme = chooseFrom([
       "red",
@@ -370,33 +371,91 @@ var Pipe = function(scene, options) {
         return;
       }
     }
+    var lastDirectionVector = null;
     if (self.positions.length > 1) {
       var lastPosition = self.positions[self.positions.length - 2];
-      var lastDirectionVector = new THREE.Vector3().subVectors(
+      lastDirectionVector = new THREE.Vector3().subVectors(
         self.currentPosition,
         lastPosition
       );
     }
-    if (chance(1 / 2) && lastDirectionVector) {
-      var directionVector = lastDirectionVector;
-    } else {
-      var directionVector = new THREE.Vector3();
-      directionVector[chooseFrom("xyz")] += chooseFrom([+1, -1]);
-    }
-    var newPosition = new THREE.Vector3().addVectors(
-      self.currentPosition,
-      directionVector
-    );
 
-    // TODO: try other possibilities
-    // ideally, have a pool of the 6 possible directions and try them in random order, removing them from the bag
-    // (and if there's truly nowhere to go, maybe make a ball joint)
-    if (!gridBounds.containsPoint(newPosition)) {
+    // Build the six axis-aligned unit directions.
+    var allDirections = [
+      new THREE.Vector3(1, 0, 0),
+      new THREE.Vector3(-1, 0, 0),
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(0, -1, 0),
+      new THREE.Vector3(0, 0, 1),
+      new THREE.Vector3(0, 0, -1),
+    ];
+
+    // Choose a primary direction, preferring to continue straight when possible.
+    var primaryDirection = null;
+    if (lastDirectionVector && chance(1 / 2)) {
+      primaryDirection = lastDirectionVector.clone().normalize();
+    } else {
+      primaryDirection = new THREE.Vector3();
+      primaryDirection[chooseFrom("xyz")] = chooseFrom([+1, -1]);
+    }
+
+    // Build a prioritized list of directions: primary first, then the rest shuffled.
+    var prioritizedDirections = [];
+    // Find a matching entry in allDirections for primaryDirection
+    var primaryMatched = null;
+    for (var d = 0; d < allDirections.length; d++) {
+      if (allDirections[d].equals(primaryDirection)) {
+        primaryMatched = allDirections[d];
+        break;
+      }
+    }
+    if (primaryMatched) {
+      prioritizedDirections.push(primaryMatched);
+    }
+    // Add the remaining directions in random order
+    var remaining = allDirections.filter(function(dir) {
+      return !primaryMatched || !dir.equals(primaryMatched);
+    });
+    shuffleArrayInPlace(remaining);
+    Array.prototype.push.apply(prioritizedDirections, remaining);
+
+    // Try each direction at most once until we find a free, in-bounds cell.
+    var directionVector = null;
+    var newPosition = null;
+    for (var i = 0; i < prioritizedDirections.length; i++) {
+      var dir = prioritizedDirections[i];
+      var candidate = new THREE.Vector3().addVectors(self.currentPosition, dir);
+      if (!gridBounds.containsPoint(candidate)) {
+        continue;
+      }
+      if (getAt(candidate)) {
+        continue;
+      }
+      directionVector = dir;
+      newPosition = candidate;
+      break;
+    }
+
+    // If all 6 directions are blocked or out of bounds, this pipe is stuck.
+    if (!directionVector || !newPosition) {
+      if (!self.stuckDecorated) {
+        console.log(
+          "Pipe stuck: all 6 directions blocked or out of bounds at",
+          self.currentPosition.x,
+          self.currentPosition.y,
+          self.currentPosition.z
+        );
+        // Add a final joint at the pipe end once: prefer teapot, otherwise ball.
+        if (chance(options.teapotChance)) {
+          makeTeapotJoint(self.currentPosition);
+        } else {
+          makeBallJoint(self.currentPosition);
+        }
+        self.stuckDecorated = true;
+      }
       return;
     }
-    if (getAt(newPosition)) {
-      return;
-    }
+
     setAt(newPosition, self);
 
     // joint
