@@ -316,6 +316,7 @@ var options = {
   baseTeapotChance: 1 / 1000,
   candyCanePipeChance: 1 / 200,
   candyCaneTeapotChance: 1 / 500,
+  dissolveDuration: 1.2,
 };
 jointTypeSelect.addEventListener("change", function() {
   options.joints = jointTypeSelect.value;
@@ -361,6 +362,14 @@ if (speedInputEl) {
 var baseTeapotInput = document.getElementById("base-teapot-denom");
 var candycanePipeInput = document.getElementById("candycane-pipe-denom");
 var candycaneTeapotInput = document.getElementById("candycane-teapot-denom");
+var dissolveTileSizeInput = document.getElementById("dissolve-tile-size");
+var dissolveTileSizeDisplay = document.getElementById(
+  "dissolve-tile-size-display"
+);
+var dissolveDurationInput = document.getElementById("dissolve-duration");
+var dissolveDurationDisplay = document.getElementById(
+  "dissolve-duration-display"
+);
 
 function updateTeapotChancesFromUI() {
   function denomToChance(inputEl, fallback) {
@@ -391,6 +400,60 @@ if (candycanePipeInput) {
 }
 if (candycaneTeapotInput) {
   candycaneTeapotInput.addEventListener("change", updateTeapotChancesFromUI);
+}
+
+function updateDissolveTileSizeFromUI() {
+  if (!dissolveTileSizeInput) return;
+  var v = parseInt(dissolveTileSizeInput.value, 10);
+  if (!isFinite(v) || v <= 0) {
+    v = 8;
+  }
+  dissolveTileSize = v;
+  if (dissolveTileSizeDisplay) {
+    var label;
+    if (v <= 4) {
+      label = "super fine";
+    } else if (v <= 12) {
+      label = "fine";
+    } else if (v <= 24) {
+      label = "medium";
+    } else {
+      label = "chunky";
+    }
+    dissolveTileSizeDisplay.textContent = v + "px (" + label + ")";
+  }
+}
+
+if (dissolveTileSizeInput) {
+  dissolveTileSizeInput.addEventListener("input", updateDissolveTileSizeFromUI);
+}
+
+function updateDissolveDurationFromUI() {
+  if (!dissolveDurationInput) return;
+  var v = parseFloat(dissolveDurationInput.value);
+  if (!isFinite(v) || v <= 0) {
+    v = 1.2;
+  }
+  options.dissolveDuration = v;
+  if (dissolveDurationDisplay) {
+    var label;
+    if (v <= 0.4) {
+      label = "very fast";
+    } else if (v <= 0.8) {
+      label = "fast";
+    } else if (v <= 1.5) {
+      label = "normal";
+    } else if (v <= 2.5) {
+      label = "slow";
+    } else {
+      label = "very slow";
+    }
+    dissolveDurationDisplay.textContent = v.toFixed(1) + "s (" + label + ")";
+  }
+}
+
+if (dissolveDurationInput) {
+  dissolveDurationInput.addEventListener("input", updateDissolveDurationFromUI);
 }
 
 var canvasContainer = document.getElementById("canvas-container");
@@ -452,13 +515,14 @@ var dissolveRectsPerColumn = 50;
 var dissolveTransitionSeconds = 2;
 var dissolveTransitionFrames = dissolveTransitionSeconds * 60;
 var dissolveEndCallback;
+// default tile size in pixels; can be overridden from the UI
+var dissolveTileSize = 8;
 
 function dissolve(seconds, endCallback) {
   // TODO: determine rect sizes better and simplify
   // (approximation of squares of a particular size)
-  // Tile size scales with geometry quality: higher quality → more, smaller tiles.
-  var targetRectSize =
-    geometryQuality === "low" ? 20 : geometryQuality === "medium" ? 12 : 8; // px
+  // Tile size is user-configurable via the dissolve granularity slider.
+  var targetRectSize = dissolveTileSize || 8; // px
   dissolveRectsPerRow = Math.ceil(window.innerWidth / targetRectSize);
   dissolveRectsPerColumn = Math.ceil(window.innerHeight / targetRectSize);
 
@@ -493,8 +557,9 @@ function clear(fast) {
   );
   if (!clearing) {
     clearing = true;
-    // Slightly faster dissolve overall
-    var fadeOutTime = fast ? 0.15 : 1.2;
+    // Slightly faster dissolve overall when triggered as "fast"
+    var baseDuration = options.dissolveDuration || 1.2;
+    var fadeOutTime = fast ? Math.max(0.05, baseDuration * 0.25) : baseDuration;
     dissolve(fadeOutTime, reset);
   }
 }
@@ -561,7 +626,9 @@ function stepOnce() {
   if (!clearing) {
     renderer.render(scene, camera);
   }
+}
 
+function updateDissolveLayer() {
   if (
     canvas2d.width !== window.innerWidth ||
     canvas2d.height !== window.innerHeight
@@ -628,6 +695,9 @@ function animate() {
   for (var s = 0; s < steps; s++) {
     stepOnce();
   }
+
+  // progress dissolve effect once per browser frame, independent of speed
+  updateDissolveLayer();
 
   requestAnimationFrame(animate);
 }
@@ -753,6 +823,9 @@ window.addEventListener("hashchange", updateFromParametersInURL);
 // initialize UI displays and start animation
 updateSpeedDisplay();
 updateTeapotChancesFromUI();
+updateDissolveTileSizeFromUI();
+updateDissolveDurationFromUI();
+updateDissolveTileSizeFromUI();
 animate();
 
 /**************\

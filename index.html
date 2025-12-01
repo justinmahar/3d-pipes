@@ -94,6 +94,40 @@
           <option value="retina" selected>Retina</option>
         </select>
       </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
+        Dissolve granularity:
+        <input
+          id="dissolve-tile-size"
+          type="range"
+          min="2"
+          max="64"
+          step="1"
+          value="8"
+        />
+        <span
+          id="dissolve-tile-size-display"
+          style="font-size: 12px; opacity: 0.85;"
+        ></span>
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
+        Dissolve duration:
+        <input
+          id="dissolve-duration"
+          type="range"
+          min="0.2"
+          max="4"
+          step="0.1"
+          value="1.2"
+        />
+        <span
+          id="dissolve-duration-display"
+          style="font-size: 12px; opacity: 0.85;"
+        ></span>
+      </label>
       <div
         style="
           color: white;
