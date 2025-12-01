@@ -782,7 +782,6 @@ function stepOnce() {
     }
     // TODO: create new pipes over time?
     var pipeCount = 1 + options.multiple * (1 + chance(1 / 10));
-    var multiColorAssigned = false;
     for (var i = 0; i < pipeCount; i++) {
       var pipeOptions = {
         teapotChance: basePipeOptions.teapotChance,
@@ -790,7 +789,7 @@ function stepOnce() {
         texturePath: basePipeOptions.texturePath,
         colorMode: "normal",
       };
-      if (options.multiColorEnabled && !multiColorAssigned) {
+      if (options.multiColorEnabled) {
         if (chance(options.multiColorSchemePipeChance)) {
           pipeOptions.colorMode = "scheme";
         } else if (chance(options.multiColorRandomPipeChance)) {
@@ -799,7 +798,6 @@ function stepOnce() {
         if (pipeOptions.colorMode !== "normal") {
           // multicolor pipes use solid colors, not textures
           pipeOptions.texturePath = null;
-          multiColorAssigned = true;
         }
       }
       pipes.push(new Pipe(scene, pipeOptions));
