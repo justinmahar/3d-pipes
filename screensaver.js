@@ -451,6 +451,8 @@ var options = {
   multiColorSchemePipeChance: 1 / 1000,
   multiColorRandomPipeChance: 1 / 500,
   transitionDuration: 1.2,
+  transitionDelay: 0,
+  useFastManualTransitions: true,
   transitionType: "dissolve", // "dissolve" or "fade"
 };
 jointTypeSelect.addEventListener("change", function() {
@@ -508,9 +510,16 @@ var transitionDurationInput = document.getElementById("transition-duration");
 var transitionDurationDisplay = document.getElementById(
   "transition-duration-display"
 );
+var transitionDelayInput = document.getElementById("transition-delay");
+var transitionDelayDisplay = document.getElementById(
+  "transition-delay-display"
+);
 var transitionTypeRadios = document.querySelectorAll(
   'input[name="transition-type"]'
 );
+var showFPSInput = document.getElementById("show-fps");
+var fpsDisplayEl = document.getElementById("fps-display");
+var fastManualInput = document.getElementById("fast-manual-transitions");
 
 function updateTeapotChancesFromUI() {
   function denomToChance(inputEl, fallback) {
@@ -620,6 +629,22 @@ if (transitionDurationInput) {
   );
 }
 
+function updateTransitionDelayFromUI() {
+  if (!transitionDelayInput) return;
+  var v = parseFloat(transitionDelayInput.value);
+  if (!isFinite(v) || v < 0) {
+    v = 0;
+  }
+  options.transitionDelay = v;
+  if (transitionDelayDisplay) {
+    transitionDelayDisplay.textContent = v.toFixed(1) + "s";
+  }
+}
+
+if (transitionDelayInput) {
+  transitionDelayInput.addEventListener("input", updateTransitionDelayFromUI);
+}
+
 if (transitionTypeRadios && transitionTypeRadios.length) {
   transitionTypeRadios.forEach(function(radio) {
     if (radio.checked) {
@@ -630,6 +655,30 @@ if (transitionTypeRadios && transitionTypeRadios.length) {
         options.transitionType = radio.value;
       }
     });
+  });
+}
+
+if (showFPSInput) {
+  showFPSInput.addEventListener("change", function() {
+    if (!fpsDisplayEl) return;
+    if (showFPSInput.checked) {
+      // will be updated in the animate loop
+      fpsDisplayEl.style.display = "block";
+    } else {
+      fpsDisplayEl.style.display = "none";
+      fpsDisplayEl.textContent = "";
+    }
+  });
+  // initialize visibility
+  if (fpsDisplayEl) {
+    fpsDisplayEl.style.display = showFPSInput.checked ? "block" : "none";
+  }
+}
+
+if (fastManualInput) {
+  options.useFastManualTransitions = !!fastManualInput.checked;
+  fastManualInput.addEventListener("change", function() {
+    options.useFastManualTransitions = !!fastManualInput.checked;
   });
 }
 
@@ -692,6 +741,7 @@ var dissolveRectsPerColumn = 50;
 var dissolveTransitionSeconds = 2;
 var dissolveTransitionFrames = dissolveTransitionSeconds * 60;
 var dissolveEndCallback;
+var dissolveStartTime = 0; // ms from performance.now()
 // default tile size in pixels; can be overridden from the UI
 var dissolveTileSize = 8;
 // fade-specific progress (0–frames), -1 when inactive
@@ -703,6 +753,7 @@ function dissolve(seconds, endCallback) {
   dissolveTransitionSeconds = seconds;
   dissolveTransitionFrames = dissolveTransitionSeconds * 60;
   dissolveEndCallback = endCallback;
+  dissolveStartTime = performance.now();
 
   if (options.transitionType === "fade") {
     // Use fullscreen fade; don't prepare tile list
@@ -738,18 +789,41 @@ function finishDissolve() {
 
 var clearing = false;
 var clearTID = -1;
+var clearDelayTID = -1;
+var lastFpsSampleTime = performance.now();
+var framesSinceFpsSample = 0;
+
+function beginTransition(fast) {
+  if (clearing) {
+    return;
+  }
+  clearing = true;
+  // Transition duration comes directly from the configured value,
+  // optionally shortened when triggered manually with fast clears.
+  var baseDuration = options.transitionDuration || 1.2;
+  if (fast && options.useFastManualTransitions) {
+    baseDuration *= 0.25;
+  }
+  var fadeOutTime = Math.max(0.05, baseDuration);
+  dissolve(fadeOutTime, reset);
+}
+
 function clear(fast) {
   clearTimeout(clearTID);
+  clearTimeout(clearDelayTID);
   clearTID = setTimeout(
     clear,
     random(options.interval[0], options.interval[1]) * 1000
   );
   if (!clearing) {
-    clearing = true;
-    // Slightly faster transition overall when triggered as "fast"
-    var baseDuration = options.transitionDuration || 1.2;
-    var fadeOutTime = fast ? Math.max(0.05, baseDuration * 0.25) : baseDuration;
-    dissolve(fadeOutTime, reset);
+    var delayMs = Math.max(0, (options.transitionDelay || 0) * 1000);
+    if (delayMs > 0) {
+      clearDelayTID = setTimeout(function() {
+        beginTransition(fast);
+      }, delayMs);
+    } else {
+      beginTransition(fast);
+    }
   }
 }
 clearTID = setTimeout(
@@ -838,7 +912,7 @@ function stepOnce() {
 function updateDissolveLayer() {
   // Fade mode: use fullscreen alpha fade instead of tiles
   if (options.transitionType === "fade") {
-    if (fadeFrame < 0 || dissolveTransitionFrames <= 0) {
+    if (fadeFrame < 0 || dissolveTransitionSeconds <= 0) {
       return;
     }
     if (
@@ -848,13 +922,16 @@ function updateDissolveLayer() {
       canvas2d.width = window.innerWidth;
       canvas2d.height = window.innerHeight;
     }
-    var t = Math.min(1, fadeFrame / dissolveTransitionFrames);
+    var elapsed = (performance.now() - dissolveStartTime) / 1000;
+    var t = Math.min(
+      1,
+      dissolveTransitionSeconds > 0 ? elapsed / dissolveTransitionSeconds : 1
+    );
     ctx2d.save();
     ctx2d.globalAlpha = t;
     ctx2d.fillStyle = "black";
     ctx2d.fillRect(0, 0, canvas2d.width, canvas2d.height);
     ctx2d.restore();
-    fadeFrame += 1;
     if (t >= 1) {
       finishDissolve();
     }
@@ -886,15 +963,18 @@ function updateDissolveLayer() {
     }
   }
   if (dissolveRectsIndex > -1) {
-    // TODO: calibrate based on time transition is actually taking
-    var rectsAtATime = Math.max(
+    // Time-based progression: fill tiles according to elapsed fraction
+    var elapsedSeconds = (performance.now() - dissolveStartTime) / 1000;
+    var t2 = Math.min(
       1,
-      Math.floor(dissolveRects.length / dissolveTransitionFrames)
+      dissolveTransitionSeconds > 0
+        ? elapsedSeconds / dissolveTransitionSeconds
+        : 1
     );
-    for (
-      var i = 0;
-      i < rectsAtATime && dissolveRectsIndex < dissolveRects.length;
-      i++
+    var targetIndex = Math.floor(t2 * dissolveRects.length);
+    while (
+      dissolveRectsIndex < targetIndex &&
+      dissolveRectsIndex < dissolveRects.length
     ) {
       var rect = dissolveRects[dissolveRectsIndex];
       // TODO: could precompute rect in screen space, or at least make this clearer with "xIndex"/"yIndex"
@@ -909,7 +989,7 @@ function updateDissolveLayer() {
       );
       dissolveRectsIndex += 1;
     }
-    if (dissolveRectsIndex === dissolveRects.length) {
+    if (t2 >= 1 || dissolveRectsIndex === dissolveRects.length) {
       finishDissolve();
     }
   }
@@ -924,6 +1004,19 @@ function animate() {
 
   // keep UI display in sync
   updateSpeedDisplay();
+
+  // FPS display (render loop FPS, not simulation speed)
+  framesSinceFpsSample += 1;
+  if (fpsDisplayEl && showFPSInput && showFPSInput.checked) {
+    var now = performance.now();
+    var dt = now - lastFpsSampleTime;
+    if (dt >= 250) {
+      var fps = (framesSinceFpsSample * 1000) / dt;
+      fpsDisplayEl.textContent = fps.toFixed(0) + " FPS";
+      lastFpsSampleTime = now;
+      framesSinceFpsSample = 0;
+    }
+  }
 
   if (!paused) {
     for (var s = 0; s < steps; s++) {
@@ -1080,6 +1173,7 @@ updateSpeedDisplay();
 updateTeapotChancesFromUI();
 updateDissolveTileSizeFromUI();
 updateTransitionDurationFromUI();
+updateTransitionDelayFromUI();
 animate();
 
 /**************\

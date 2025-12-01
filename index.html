@@ -97,6 +97,11 @@
       <label
         style="color: white; font-size: 13px; display: block; margin-top: 4px;"
       >
+        <input id="show-fps" type="checkbox" /> Show FPS (upper right)
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
         Transition type:
         <label style="margin-left: 8px; font-weight: normal;">
           <input type="radio" name="transition-type" value="fade" checked />
@@ -127,6 +132,23 @@
       <label
         style="color: white; font-size: 13px; display: block; margin-top: 4px;"
       >
+        Transition delay:
+        <input
+          id="transition-delay"
+          type="range"
+          min="0"
+          max="10"
+          step="0.1"
+          value="0"
+        />
+        <span
+          id="transition-delay-display"
+          style="font-size: 12px; opacity: 0.85;"
+        ></span>
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
         Dissolve granularity:
         <input
           id="dissolve-tile-size"
@@ -140,6 +162,17 @@
           id="dissolve-tile-size-display"
           style="font-size: 12px; opacity: 0.85;"
         ></span>
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
+        Use fast transitions for manual clears:
+        <input
+          id="fast-manual-transitions"
+          type="checkbox"
+          checked="checked"
+          style="margin-left: 4px;"
+        />
       </label>
       <div
         style="
@@ -280,6 +313,11 @@
       <canvas id="canvas-webgl"></canvas>
       <canvas id="canvas-2d" style="pointer-events: none"></canvas>
     </div>
+    <div
+      id="fps-display"
+      class="ui-container"
+      style="pointer-events: none;"
+    ></div>
     <script src="screensaver.js"></script>
   </body>
 </html>
