@@ -339,6 +339,57 @@
           />
         </label>
       </div>
+      <div
+        style="
+          color: white;
+          font-size: 13px;
+          margin-top: 6px;
+          padding-top: 4px;
+          border-top: 1px solid rgba(255, 255, 255, 0.15);
+        "
+      >
+        <div style="margin-bottom: 2px; font-weight: 500;">Snow</div>
+        <label style="display: block; margin-top: 2px;">
+          <input id="snow-enabled" type="checkbox" checked /> Enable falling
+          snow during candycane scenes
+        </label>
+        <label style="display: block; margin-top: 2px;">
+          Snow density:
+          <input
+            id="snow-density"
+            type="number"
+            min="0"
+            step="50"
+            value="800"
+            style="width: 70px;"
+          />
+          <span style="font-size: 12px;">flakes</span>
+        </label>
+        <label style="display: block; margin-top: 2px;">
+          Snow speed:
+          <input
+            id="snow-speed"
+            type="number"
+            min="0"
+            step="0.1"
+            value="1"
+            style="width: 70px;"
+          />
+          <span style="font-size: 12px;">x</span>
+        </label>
+        <label style="display: block; margin-top: 2px;">
+          Snow fade:
+          <input
+            id="snow-fade-duration"
+            type="number"
+            min="0.1"
+            step="0.1"
+            value="0.6"
+            style="width: 70px;"
+          />
+          <span style="font-size: 12px;">seconds</span>
+        </label>
+      </div>
       <br />
       <button id="toggle-controls">
         <span class="normal-controls-enabled">Control Camera</span>

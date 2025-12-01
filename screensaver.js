@@ -526,6 +526,12 @@ var options = {
   fpsCutoffEnabled: false,
   fpsCutoffValue: 20,
   idleCutoffSeconds: 2,
+  // Snow
+  snowEnabled: true,
+  snowDensity: 400,
+  snowSpeed: 1,
+  snowFadeDuration: 0.6,
+  isCandyScene: false,
 };
 jointTypeSelect.addEventListener("change", function() {
   options.joints = jointTypeSelect.value;
@@ -602,6 +608,10 @@ var fastManualInput = document.getElementById("fast-manual-transitions");
 var fpsCutoffEnabledInput = document.getElementById("fps-cutoff-enabled");
 var fpsCutoffValueInput = document.getElementById("fps-cutoff-value");
 var idleCutoffSecondsInput = document.getElementById("idle-cutoff-seconds");
+var snowEnabledInput = document.getElementById("snow-enabled");
+var snowDensityInput = document.getElementById("snow-density");
+var snowSpeedInput = document.getElementById("snow-speed");
+var snowFadeDurationInput = document.getElementById("snow-fade-duration");
 
 function updateTeapotChancesFromUI() {
   function denomToChance(inputEl, fallback) {
@@ -869,6 +879,61 @@ if (idleCutoffSecondsInput) {
   );
 }
 
+function updateSnowSettingsFromUI() {
+  if (snowEnabledInput) {
+    options.snowEnabled = !!snowEnabledInput.checked;
+  }
+  if (snowDensityInput) {
+    var d = parseInt(snowDensityInput.value, 10);
+    if (!isFinite(d) || d < 0) {
+      d = 0;
+    }
+    options.snowDensity = d;
+  }
+  if (snowSpeedInput) {
+    var s = parseFloat(snowSpeedInput.value);
+    if (!isFinite(s) || s < 0) {
+      s = 0;
+    }
+    options.snowSpeed = s;
+  }
+  if (snowFadeDurationInput) {
+    var f = parseFloat(snowFadeDurationInput.value);
+    if (!isFinite(f) || f <= 0) {
+      f = 0.6;
+    }
+    options.snowFadeDuration = f;
+  }
+}
+
+if (snowEnabledInput || snowDensityInput || snowSpeedInput) {
+  // Initialize from UI, but don't rebuild snow geometry yet (scene not created).
+  updateSnowSettingsFromUI();
+  if (snowEnabledInput) {
+    snowEnabledInput.addEventListener("change", function() {
+      updateSnowSettingsFromUI();
+      rebuildSnowSystem();
+    });
+  }
+  if (snowDensityInput) {
+    snowDensityInput.addEventListener("change", function() {
+      updateSnowSettingsFromUI();
+      rebuildSnowSystem();
+    });
+  }
+  if (snowSpeedInput) {
+    snowSpeedInput.addEventListener("change", function() {
+      updateSnowSettingsFromUI();
+      // Speed affects per-frame motion only; no need to rebuild geometry.
+    });
+  }
+  if (snowFadeDurationInput) {
+    snowFadeDurationInput.addEventListener("change", function() {
+      updateSnowSettingsFromUI();
+    });
+  }
+}
+
 var canvasContainer = document.getElementById("canvas-container");
 
 // 2d canvas for dissolve effect
@@ -918,6 +983,217 @@ scene.add(ambientLight);
 var directionalLightL = new THREE.DirectionalLight(0xffffff, 0.9);
 directionalLightL.position.set(-1.2, 1.5, 0.5);
 scene.add(directionalLightL);
+
+// Snow particles (for candycane scenes)
+var snowGeometry = null;
+var snowPoints = null;
+var snowVelocities = null;
+var snowResting = null;
+var snowProbe = new THREE.Vector3();
+var snowFade = null;
+var snowTexture = null;
+var snowAreaHalfSize = 14;
+var snowYTop = 12;
+var snowYBottom = -10;
+var lastSnowUpdateTime = performance.now();
+
+function getSnowTexture() {
+  if (snowTexture) {
+    return snowTexture;
+  }
+  var size = 64;
+  var canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  var ctx = canvas.getContext("2d");
+  var center = size / 2;
+  var grd = ctx.createRadialGradient(center, center, 0, center, center, center);
+  grd.addColorStop(0, "rgba(255,255,255,1)");
+  grd.addColorStop(0.4, "rgba(255,255,255,0.9)");
+  grd.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, size, size);
+  snowTexture = new THREE.Texture(canvas);
+  snowTexture.needsUpdate = true;
+  return snowTexture;
+}
+
+function rebuildSnowSystem() {
+  // Clean up any existing snow system.
+  if (snowPoints) {
+    scene.remove(snowPoints);
+    if (snowGeometry) {
+      snowGeometry.dispose();
+    }
+    if (snowPoints.material) {
+      snowPoints.material.dispose();
+    }
+    snowGeometry = null;
+    snowPoints = null;
+    snowVelocities = null;
+    snowResting = null;
+    snowFade = null;
+  }
+
+  if (!options.snowEnabled) {
+    return;
+  }
+
+  var count = Math.max(0, Math.min(1500, Math.round(options.snowDensity || 0)));
+  if (count <= 0) {
+    return;
+  }
+
+  snowGeometry = new THREE.BufferGeometry();
+  var positions = new Float32Array(count * 3);
+  snowVelocities = new Float32Array(count);
+  snowResting = new Uint8Array(count); // 0 = falling, 1 = resting
+  snowFade = new Float32Array(count); // seconds since landing (for fade-out)
+  var colors = new Float32Array(count * 3);
+
+  for (var i = 0; i < count; i++) {
+    var idx3 = i * 3;
+    positions[idx3] = random(-snowAreaHalfSize, snowAreaHalfSize);
+    positions[idx3 + 1] = random(0, snowYTop);
+    positions[idx3 + 2] = random(-snowAreaHalfSize, snowAreaHalfSize);
+    snowVelocities[i] = random(0.3, 1.0);
+    colors[idx3] = 1;
+    colors[idx3 + 1] = 1;
+    colors[idx3 + 2] = 1;
+  }
+
+  snowGeometry.addAttribute(
+    "position",
+    new THREE.BufferAttribute(positions, 3)
+  );
+  snowGeometry.addAttribute("color", new THREE.BufferAttribute(colors, 3));
+  var snowMaterial = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 0.22,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
+    vertexColors: THREE.VertexColors,
+    map: getSnowTexture(),
+    alphaTest: 0.1,
+  });
+  snowPoints = new THREE.Points(snowGeometry, snowMaterial);
+  // Render on top of pipes where possible.
+  snowPoints.frustumCulled = false;
+  snowPoints.renderOrder = 1;
+  scene.add(snowPoints);
+}
+
+function updateSnow(dtSeconds) {
+  if (!snowPoints || !snowGeometry || dtSeconds <= 0) {
+    return;
+  }
+
+  var shouldBeVisible =
+    options.snowEnabled && options.isCandyScene && !clearing && !paused;
+  snowPoints.visible = shouldBeVisible;
+  if (!shouldBeVisible) {
+    return;
+  }
+
+  var positionsAttr = snowGeometry.getAttribute("position");
+  var positions = positionsAttr.array;
+  var colorsAttr = snowGeometry.getAttribute("color");
+  var colors = colorsAttr && colorsAttr.array;
+  var count = positions.length / 3;
+  var baseSpeed = options.snowSpeed || 0;
+
+  if (baseSpeed <= 0) {
+    return;
+  }
+
+  for (var i = 0; i < count; i++) {
+    var idx3 = i * 3;
+    // If this flake is in fade-out mode, gradually dim it and respawn after a delay.
+    if (snowResting && snowResting[i] && snowFade && colors) {
+      snowFade[i] += dtSeconds;
+      var fadeDuration = options.snowFadeDuration || 0.6;
+      if (fadeDuration <= 0) {
+        fadeDuration = 0.6;
+      }
+      var t = Math.min(1, snowFade[i] / fadeDuration);
+      var b = 1 - t;
+      colors[idx3] = b;
+      colors[idx3 + 1] = b;
+      colors[idx3 + 2] = b;
+      if (t >= 1) {
+        // Respawn this flake at the top.
+        positions[idx3] = random(-snowAreaHalfSize, snowAreaHalfSize);
+        positions[idx3 + 1] = snowYTop;
+        positions[idx3 + 2] = random(-snowAreaHalfSize, snowAreaHalfSize);
+        snowResting[i] = 0;
+        snowFade[i] = 0;
+        colors[idx3] = 1;
+        colors[idx3 + 1] = 1;
+        colors[idx3 + 2] = 1;
+        continue;
+      }
+    }
+
+    var vy = snowVelocities[i] * baseSpeed;
+    positions[idx3 + 1] -= vy * dtSeconds;
+
+    // Respawn flakes that fall below the snow volume.
+    if (positions[idx3 + 1] < snowYBottom) {
+      positions[idx3] = random(-snowAreaHalfSize, snowAreaHalfSize);
+      positions[idx3 + 1] = snowYTop;
+      positions[idx3 + 2] = random(-snowAreaHalfSize, snowAreaHalfSize);
+      if (snowResting) {
+        snowResting[i] = 0;
+      }
+      if (snowFade && colors) {
+        snowFade[i] = 0;
+        colors[idx3] = 1;
+        colors[idx3 + 1] = 1;
+        colors[idx3 + 2] = 1;
+      }
+      continue;
+    }
+
+    // Coarse collision against the existing pipe occupancy grid.
+    if (snowResting) {
+      // Probe slightly below the flake to see if we're hitting a pipe node.
+      var probeY = positions[idx3 + 1] - 0.25;
+      snowProbe.set(
+        Math.round(positions[idx3]),
+        Math.round(probeY),
+        Math.round(positions[idx3 + 2])
+      );
+      if (getAt(snowProbe)) {
+        // Require the flake to be reasonably close horizontally to the pipe node,
+        // to avoid "sticking in mid air" when passing near but not over a pipe.
+        var dx = positions[idx3] - snowProbe.x;
+        var dz = positions[idx3 + 2] - snowProbe.z;
+        var distSq = dx * dx + dz * dz;
+        var maxDist = 0.6;
+        if (distSq <= maxDist * maxDist) {
+          // Mark this flake for fade-out (it "hit" a pipe) but let it keep falling.
+          if (!snowResting[i]) {
+            snowResting[i] = 1;
+            if (snowFade) {
+              snowFade[i] = 0;
+            }
+            if (colors) {
+              colors[idx3] = 1;
+              colors[idx3 + 1] = 1;
+              colors[idx3 + 2] = 1;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  positionsAttr.needsUpdate = true;
+  if (colorsAttr) {
+    colorsAttr.needsUpdate = true;
+  }
+}
 
 // dissolve transition effect
 
@@ -1028,6 +1304,8 @@ function reset() {
   look();
   // increment scene index after each full clear; used for "intro vanilla" scenes
   options.sceneIndex = (options.sceneIndex || 0) + 1;
+  // reset per-scene flags
+  options.isCandyScene = false;
   clearing = false;
 }
 
@@ -1065,6 +1343,7 @@ function stepOnce() {
       // Candy cane pipes: use the special-pipe teapot chance
       basePipeOptions.teapotChance = options.candyCaneTeapotChance;
       basePipeOptions.texturePath = "images/textures/candycane.png";
+      options.isCandyScene = true;
       // TODO: DRY
       if (!textures[basePipeOptions.texturePath]) {
         var texture = THREE.ImageUtils.loadTexture(basePipeOptions.texturePath);
@@ -1210,6 +1489,13 @@ function updateDissolveLayer() {
 }
 
 function animate() {
+  var now = performance.now();
+  var snowDtSeconds = (now - lastSnowUpdateTime) / 1000;
+  if (snowDtSeconds < 0 || snowDtSeconds > 1) {
+    snowDtSeconds = 0;
+  }
+  lastSnowUpdateTime = now;
+
   var speedValue = speedInputEl ? parseInt(speedInputEl.value, 10) || 1 : 1;
 
   // Map slider 1–200 to how many simulation steps we run per animation frame.
@@ -1221,10 +1507,9 @@ function animate() {
 
   // FPS display (render loop FPS, not simulation speed) and cutoff
   framesSinceFpsSample += 1;
-  var now = performance.now();
-  var dt = now - lastFpsSampleTime;
-  if (dt >= 250) {
-    var fps = (framesSinceFpsSample * 1000) / dt;
+  var sampleDt = now - lastFpsSampleTime;
+  if (sampleDt >= 250) {
+    var fps = (framesSinceFpsSample * 1000) / sampleDt;
     // Update on-screen FPS meter
     if (fpsDisplayEl && showFPSInput && showFPSInput.checked) {
       fpsDisplayEl.textContent = fps.toFixed(0) + " FPS";
@@ -1258,6 +1543,9 @@ function animate() {
       stepOnce();
     }
   }
+
+  // Update snow once per render frame, time-based.
+  updateSnow(snowDtSeconds);
 
   // progress dissolve effect once per browser frame, independent of speed
   updateDissolveLayer();
@@ -1415,6 +1703,7 @@ updateFadeCurveFromUI();
 updateFadeStretchFromUI();
 updateInitialVanillaScenesFromUI();
 updateIdleCutoffSecondsFromUI();
+rebuildSnowSystem();
 animate();
 
 /**************\
