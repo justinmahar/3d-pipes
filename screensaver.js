@@ -439,12 +439,12 @@ var Pipe = function(scene, options) {
     // If all 6 directions are blocked or out of bounds, this pipe is stuck.
     if (!directionVector || !newPosition) {
       if (!self.stuckDecorated) {
-        console.log(
-          "Pipe stuck: all 6 directions blocked or out of bounds at",
-          self.currentPosition.x,
-          self.currentPosition.y,
-          self.currentPosition.z
-        );
+        // console.log(
+        //   "Pipe stuck: all 6 directions blocked or out of bounds at",
+        //   self.currentPosition.x,
+        //   self.currentPosition.y,
+        //   self.currentPosition.z
+        // );
         // Add a final joint at the pipe end once: prefer teapot, otherwise ball.
         if (chance(options.teapotChance)) {
           makeTeapotJoint(self.currentPosition);
