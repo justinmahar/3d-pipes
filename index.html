@@ -52,6 +52,7 @@
         </svg>
         Enter Fullscreen
       </button>
+      <br />
       <label>
         Joint Type:
         <select id="joint-types">
@@ -65,7 +66,7 @@
       <label for="speed" style="color: white;">
         Speed:
         <input
-          type="range"
+          type="number"
           name="speed"
           min="1"
           step="1"
@@ -139,7 +140,7 @@
         Transition duration:
         <input
           id="transition-duration"
-          type="range"
+          type="number"
           min="0.1"
           max="10"
           step="0.1"
@@ -156,7 +157,7 @@
         Transition delay:
         <input
           id="transition-delay"
-          type="range"
+          type="number"
           min="0"
           max="10"
           step="0.1"
@@ -173,7 +174,7 @@
         Fade curve:
         <input
           id="fade-curve"
-          type="range"
+          type="number"
           min="0.3"
           max="3"
           step="0.1"
@@ -190,7 +191,7 @@
         Fade stretch:
         <input
           id="fade-stretch"
-          type="range"
+          type="number"
           min="0.5"
           max="20"
           step="0.1"
@@ -207,7 +208,7 @@
         Dissolve granularity:
         <input
           id="dissolve-tile-size"
-          type="range"
+          type="number"
           min="2"
           max="64"
           step="1"
@@ -230,6 +231,20 @@
           value="5"
           style="width: 60px; margin-left: 4px;"
         />
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
+        Idle cutoff:
+        <input
+          id="idle-cutoff-seconds"
+          type="number"
+          min="0"
+          step="0.1"
+          value="2"
+          style="width: 60px; margin-left: 4px;"
+        />
+        <span style="font-size: 12px;">seconds with no new pipes → skip</span>
       </label>
       <label
         style="color: white; font-size: 13px; display: block; margin-top: 4px;"

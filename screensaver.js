@@ -14,6 +14,10 @@ function clearGrid() {
   nodes = {};
 }
 
+// Track the last time any pipe successfully laid a new segment.
+// Used to detect when the system has effectively stalled.
+var lastPipeAdvanceTime = performance.now();
+
 var textures = {};
 var Pipe = function(scene, options) {
   var self = this;
@@ -226,6 +230,8 @@ var Pipe = function(scene, options) {
     mesh.updateMatrix();
 
     self.object3d.add(mesh);
+    // Mark time whenever a new segment is successfully laid.
+    lastPipeAdvanceTime = performance.now();
     scheduleGrow(mesh, "segment");
   };
   var makeBallJoint = function(position) {
@@ -460,6 +466,7 @@ var options = {
   sceneIndex: 0,
   fpsCutoffEnabled: false,
   fpsCutoffValue: 20,
+  idleCutoffSeconds: 2,
 };
 jointTypeSelect.addEventListener("change", function() {
   options.joints = jointTypeSelect.value;
@@ -535,6 +542,7 @@ var fpsDisplayEl = document.getElementById("fps-display");
 var fastManualInput = document.getElementById("fast-manual-transitions");
 var fpsCutoffEnabledInput = document.getElementById("fps-cutoff-enabled");
 var fpsCutoffValueInput = document.getElementById("fps-cutoff-value");
+var idleCutoffSecondsInput = document.getElementById("idle-cutoff-seconds");
 
 function updateTeapotChancesFromUI() {
   function denomToChance(inputEl, fallback) {
@@ -783,6 +791,23 @@ if (fpsCutoffValueInput) {
       options.fpsCutoffValue = newVal;
     }
   });
+}
+
+function updateIdleCutoffSecondsFromUI() {
+  if (!idleCutoffSecondsInput) return;
+  var v = parseFloat(idleCutoffSecondsInput.value);
+  if (!isFinite(v) || v < 0) {
+    v = 0;
+  }
+  options.idleCutoffSeconds = v;
+}
+
+if (idleCutoffSecondsInput) {
+  updateIdleCutoffSecondsFromUI();
+  idleCutoffSecondsInput.addEventListener(
+    "change",
+    updateIdleCutoffSecondsFromUI
+  );
 }
 
 var canvasContainer = document.getElementById("canvas-container");
@@ -1157,6 +1182,18 @@ function animate() {
     framesSinceFpsSample = 0;
   }
 
+  // If no pipe has successfully laid a new segment for more than the
+  // configured idle cutoff, assume we're stuck and skip to the next scene.
+  if (!clearing && !paused && pipes.length > 0) {
+    var idleMs = (options.idleCutoffSeconds || 0) * 1000;
+    if (idleMs > 0) {
+      var sinceAdvance = performance.now() - lastPipeAdvanceTime;
+      if (sinceAdvance > idleMs) {
+        clear(true);
+      }
+    }
+  }
+
   if (!paused) {
     for (var s = 0; s < steps; s++) {
       stepOnce();
@@ -1257,6 +1294,8 @@ window.addEventListener(
     }
     if (e.code === "KeyR") {
       e.preventDefault();
+      // Restart scene counter so intro vanilla scenes are honored again.
+      options.sceneIndex = 0;
       clear(true);
     } else if (e.code === "Space") {
       e.preventDefault();
@@ -1316,6 +1355,7 @@ updateTransitionDelayFromUI();
 updateFadeCurveFromUI();
 updateFadeStretchFromUI();
 updateInitialVanillaScenesFromUI();
+updateIdleCutoffSecondsFromUI();
 animate();
 
 /**************\
