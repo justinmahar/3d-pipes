@@ -828,10 +828,15 @@ var options = {
   cutoffGraceSeconds: 3,
   thicknessEnabled: true,
   thicknessAmount: 0.3,
-  maxThickPipesPerScene: 3,
   turnTendencyMin: 0.2,
   turnTendencyMax: 0.8,
   pipeShininess: 60,
+  minPipesPerScene: 1,
+  maxPipesPerScene: 6,
+  canOfWormsEnabled: true,
+  canOfWormsChance: 1 / 200,
+  canOfWormsMin: 10,
+  canOfWormsMax: 50,
 };
 jointTypeSelect.addEventListener("change", function() {
   options.joints = jointTypeSelect.value;
@@ -841,10 +846,10 @@ jointTypeSelect.addEventListener("change", function() {
 var resolutionScale = "retina"; // "normal" | "retina"
 var pipeThicknessEnabled = true;
 var pipeThicknessAmount = 0.3;
-var pipeThicknessMax = 3;
 var pipeSidesOverride = 0;
 var jointSegmentsOverride = 0;
-var maxPipesPerScene = 0;
+var minPipesPerScene = 1;
+var maxPipesPerScene = 6;
 var turnTendencyMin = 0.2;
 var turnTendencyMax = 0.8;
 var pipeShininess = 60;
@@ -862,9 +867,9 @@ var pipeThicknessEnabledInput = document.getElementById(
   "pipe-thickness-enabled"
 );
 var pipeThicknessAmountInput = document.getElementById("pipe-thickness-amount");
-var pipeThicknessMaxInput = document.getElementById("pipe-thickness-max");
 var pipeSidesInput = document.getElementById("pipe-sides");
 var jointSegmentsInput = document.getElementById("joint-segments");
+var minPipesPerSceneInput = document.getElementById("min-pipes-per-scene");
 var maxPipesPerSceneInput = document.getElementById("max-pipes-per-scene");
 
 function updatePipeThicknessFromUI() {
@@ -881,19 +886,9 @@ function updatePipeThicknessFromUI() {
     // Disable numeric input when thickness is off
     pipeThicknessAmountInput.disabled = !pipeThicknessEnabled;
   }
-  if (pipeThicknessMaxInput) {
-    var m = parseInt(pipeThicknessMaxInput.value, 10);
-    if (!isFinite(m) || m < 0) m = 0;
-    pipeThicknessMax = m;
-    options.maxThickPipesPerScene = m;
-  }
 }
 
-if (
-  pipeThicknessEnabledInput ||
-  pipeThicknessAmountInput ||
-  pipeThicknessMaxInput
-) {
+if (pipeThicknessEnabledInput || pipeThicknessAmountInput) {
   updatePipeThicknessFromUI();
   if (pipeThicknessEnabledInput) {
     pipeThicknessEnabledInput.addEventListener(
@@ -906,9 +901,6 @@ if (
       "change",
       updatePipeThicknessFromUI
     );
-  }
-  if (pipeThicknessMaxInput) {
-    pipeThicknessMaxInput.addEventListener("change", updatePipeThicknessFromUI);
   }
 }
 
@@ -925,20 +917,42 @@ function updateGeometryGranularFromUI() {
     if (js > 64) js = 64;
     jointSegmentsOverride = js;
   }
-  if (maxPipesPerSceneInput) {
-    var mp = parseInt(maxPipesPerSceneInput.value, 10);
-    if (!isFinite(mp) || mp < 0) mp = 0;
-    maxPipesPerScene = mp;
+  var minP = minPipesPerScene;
+  var maxP = maxPipesPerScene;
+  if (minPipesPerSceneInput) {
+    var mpMin = parseInt(minPipesPerSceneInput.value, 10);
+    if (!isFinite(mpMin) || mpMin < 1) mpMin = 1;
+    minP = mpMin;
   }
+  if (maxPipesPerSceneInput) {
+    var mpMax = parseInt(maxPipesPerSceneInput.value, 10);
+    if (!isFinite(mpMax) || mpMax < minP) mpMax = minP;
+    maxP = mpMax;
+  }
+  minPipesPerScene = minP;
+  maxPipesPerScene = maxP;
+  options.minPipesPerScene = minP;
+  options.maxPipesPerScene = maxP;
 }
 
-if (pipeSidesInput || jointSegmentsInput || maxPipesPerSceneInput) {
+if (
+  pipeSidesInput ||
+  jointSegmentsInput ||
+  minPipesPerSceneInput ||
+  maxPipesPerSceneInput
+) {
   updateGeometryGranularFromUI();
   if (pipeSidesInput) {
     pipeSidesInput.addEventListener("change", updateGeometryGranularFromUI);
   }
   if (jointSegmentsInput) {
     jointSegmentsInput.addEventListener("change", updateGeometryGranularFromUI);
+  }
+  if (minPipesPerSceneInput) {
+    minPipesPerSceneInput.addEventListener(
+      "change",
+      updateGeometryGranularFromUI
+    );
   }
   if (maxPipesPerSceneInput) {
     maxPipesPerSceneInput.addEventListener(
@@ -970,6 +984,10 @@ var candycaneTeapotInput = document.getElementById("candycane-teapot-denom");
 var multiColorEnabledInput = document.getElementById("multicolor-enabled");
 var multiColorSchemeInput = document.getElementById("multicolor-scheme-denom");
 var multiColorRandomInput = document.getElementById("multicolor-random-denom");
+var canOfWormsEnabledInput = document.getElementById("can-of-worms-enabled");
+var canOfWormsDenomInput = document.getElementById("can-of-worms-denom");
+var canOfWormsMinInput = document.getElementById("can-of-worms-min");
+var canOfWormsMaxInput = document.getElementById("can-of-worms-max");
 var dissolveTileSizeInput = document.getElementById("dissolve-tile-size");
 var dissolveTileSizeDisplay = document.getElementById(
   "dissolve-tile-size-display"
@@ -1037,6 +1055,28 @@ function updateTeapotChancesFromUI() {
   if (multiColorEnabledInput) {
     options.multiColorEnabled = !!multiColorEnabledInput.checked;
   }
+  // Can-of-worms settings share the same denom-to-chance helper.
+  if (canOfWormsEnabledInput) {
+    options.canOfWormsEnabled = !!canOfWormsEnabledInput.checked;
+  }
+  options.canOfWormsChance = denomToChance(
+    canOfWormsDenomInput,
+    options.canOfWormsChance
+  );
+  var wMin = options.canOfWormsMin || 8;
+  var wMax = options.canOfWormsMax || 20;
+  if (canOfWormsMinInput) {
+    var cvMin = parseInt(canOfWormsMinInput.value, 10);
+    if (!isFinite(cvMin) || cvMin < 1) cvMin = 1;
+    wMin = cvMin;
+  }
+  if (canOfWormsMaxInput) {
+    var cvMax = parseInt(canOfWormsMaxInput.value, 10);
+    if (!isFinite(cvMax) || cvMax < wMin) cvMax = wMin;
+    wMax = cvMax;
+  }
+  options.canOfWormsMin = wMin;
+  options.canOfWormsMax = wMax;
 }
 
 if (baseTeapotInput) {
@@ -1056,6 +1096,18 @@ if (multiColorRandomInput) {
 }
 if (multiColorEnabledInput) {
   multiColorEnabledInput.addEventListener("change", updateTeapotChancesFromUI);
+}
+if (canOfWormsEnabledInput) {
+  canOfWormsEnabledInput.addEventListener("change", updateTeapotChancesFromUI);
+}
+if (canOfWormsDenomInput) {
+  canOfWormsDenomInput.addEventListener("change", updateTeapotChancesFromUI);
+}
+if (canOfWormsMinInput) {
+  canOfWormsMinInput.addEventListener("change", updateTeapotChancesFromUI);
+}
+if (canOfWormsMaxInput) {
+  canOfWormsMaxInput.addEventListener("change", updateTeapotChancesFromUI);
 }
 
 function updateDissolveTileSizeFromUI() {
@@ -1857,12 +1909,34 @@ function stepOnce() {
         textures[basePipeOptions.texturePath] = texture;
       }
     }
-    // TODO: create new pipes over time?
-    var pipeCountBase = 1 + options.multiple * (1 + chance(1 / 10));
-    var pipeCount =
-      maxPipesPerScene > 0
-        ? Math.min(pipeCountBase, maxPipesPerScene)
-        : pipeCountBase;
+    // Determine how many pipes to create for this scene.
+    // First, get the configured min/max range, clamped to at least 1.
+    var minP = isFinite(options.minPipesPerScene)
+      ? options.minPipesPerScene
+      : minPipesPerScene;
+    var maxP = isFinite(options.maxPipesPerScene)
+      ? options.maxPipesPerScene
+      : maxPipesPerScene;
+    if (!isFinite(minP) || minP < 1) minP = 1;
+    if (!isFinite(maxP) || maxP < minP) maxP = minP;
+
+    // By default, pick a count within the normal min/max.
+    var pipeCount = randomInteger(minP, maxP);
+
+    // Can-of-worms override: with a separate chance, use a much larger
+    // range for this scene's pipe count, but never during the intro
+    // vanilla phase so those scenes stay simple.
+    if (
+      !inIntroVanillaPhase &&
+      options.canOfWormsEnabled &&
+      chance(options.canOfWormsChance || 0)
+    ) {
+      var wMin = options.canOfWormsMin || 8;
+      var wMax = options.canOfWormsMax || 20;
+      if (!isFinite(wMin) || wMin < 1) wMin = 1;
+      if (!isFinite(wMax) || wMax < wMin) wMax = wMin;
+      pipeCount = randomInteger(wMin, wMax);
+    }
     for (var i = 0; i < pipeCount; i++) {
       // Sample a per-pipe turn tendency within the configured range.
       var tMin = isFinite(options.turnTendencyMin)
@@ -1909,9 +1983,9 @@ function stepOnce() {
           pipeOptions.texturePath = null;
         }
       }
-      // Limit how many pipes in a scene use hollow/thick geometry.
-      var useThicknessForThisPipe =
-        pipeThicknessEnabled && i < pipeThicknessMax;
+      // When thickness is enabled, all pipes in the scene use hollow/thick
+      // geometry (segments manage their own inner/outer usage).
+      var useThicknessForThisPipe = pipeThicknessEnabled;
       pipeOptions.thicknessOverride = useThicknessForThisPipe;
       pipes.push(new Pipe(scene, pipeOptions));
     }

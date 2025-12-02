@@ -166,13 +166,13 @@
       <label
         style="color: white; font-size: 13px; display: block; margin-top: 4px;"
       >
-        Max thick pipes per scene:
+        Min pipes per scene:
         <input
-          id="pipe-thickness-max"
+          id="min-pipes-per-scene"
           type="number"
-          min="0"
+          min="1"
           step="1"
-          value="3"
+          value="2"
           style="width: 60px; margin-left: 4px;"
         />
       </label>
@@ -185,7 +185,7 @@
           type="number"
           min="1"
           step="1"
-          value="6"
+          value="3"
           style="width: 60px; margin-left: 4px;"
         />
       </label>
@@ -468,6 +468,59 @@
             step="1"
             value="200"
             style="width: 70px;"
+          />
+        </label>
+      </div>
+      <div
+        style="
+          color: white;
+          font-size: 13px;
+          margin-top: 6px;
+          padding-top: 4px;
+          border-top: 1px solid rgba(255, 255, 255, 0.15);
+        "
+      >
+        <div style="margin-bottom: 2px; font-weight: 500;">Can of Worms</div>
+        <label
+          style="
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 2px;
+          "
+        >
+          <input id="can-of-worms-enabled" type="checkbox" checked="checked" />
+          Enable can-of-worms scenes
+        </label>
+        <label style="display: block; margin-top: 2px;">
+          Can-of-worms chance: <span style="font-size: 12px;">1 in</span>
+          <input
+            id="can-of-worms-denom"
+            type="number"
+            min="1"
+            step="1"
+            value="200"
+            style="width: 70px;"
+          />
+        </label>
+        <label style="display: block; margin-top: 2px;">
+          Can-of-worms pipes:
+          <input
+            id="can-of-worms-min"
+            type="number"
+            min="1"
+            step="1"
+            value="10"
+            style="width: 60px;"
+          />
+          –
+          <input
+            id="can-of-worms-max"
+            type="number"
+            min="1"
+            step="1"
+            value="20"
+            style="width: 60px;"
           />
         </label>
       </div>
