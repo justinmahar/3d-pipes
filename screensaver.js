@@ -14,6 +14,12 @@ function clearGrid() {
   nodes = {};
 }
 
+// Shared scratch objects to avoid per-frame allocations.
+var TMP_VEC_A = new THREE.Vector3();
+var TMP_VEC_B = new THREE.Vector3();
+var TMP_QUAT = new THREE.Quaternion();
+var UNIT_Y = new THREE.Vector3(0, 1, 0);
+
 // Track the last time any pipe successfully laid a new segment.
 // Used to detect when the system has effectively stalled.
 var lastPipeAdvanceTime = performance.now();
@@ -210,15 +216,17 @@ var Pipe = function(scene, options) {
     material,
     addStartCap
   ) {
-    var deltaVector = new THREE.Vector3().subVectors(toPoint, fromPoint);
-    var arrow = new THREE.ArrowHelper(
-      deltaVector.clone().normalize(),
-      fromPoint
-    );
+    // Compute direction and length using shared scratch vectors/quaternions
+    TMP_VEC_A.subVectors(toPoint, fromPoint);
+    var length = TMP_VEC_A.length();
+    if (length <= 0.0001) {
+      return;
+    }
+    TMP_VEC_A.normalize();
+    TMP_QUAT.setFromUnitVectors(UNIT_Y, TMP_VEC_A);
     // Segment counts driven by explicit pipe-sides override, with a sane default.
     var radialSegments = pipeSidesOverride > 0 ? pipeSidesOverride : 14;
     var heightSegments = Math.max(2, Math.round(radialSegments / 3));
-    var length = deltaVector.length();
 
     var baseMaterial =
       self.colorMode === "normal" ? material : createPieceMaterial();
@@ -235,7 +243,7 @@ var Pipe = function(scene, options) {
       );
       solidGeometry.translate(0, length / 2, 0);
       var solidMesh = new THREE.Mesh(solidGeometry, baseMaterial);
-      solidMesh.rotation.setFromQuaternion(arrow.quaternion);
+      solidMesh.quaternion.copy(TMP_QUAT);
       solidMesh.position.copy(fromPoint);
       solidMesh.updateMatrix();
       self.object3d.add(solidMesh);
@@ -282,7 +290,7 @@ var Pipe = function(scene, options) {
     segmentGroup.add(outerMesh);
     segmentGroup.add(innerMesh);
 
-    segmentGroup.rotation.setFromQuaternion(arrow.quaternion);
+    segmentGroup.quaternion.copy(TMP_QUAT);
     // Anchor the base at fromPoint so the segment can grow outward.
     segmentGroup.position.copy(fromPoint);
     segmentGroup.updateMatrix();
