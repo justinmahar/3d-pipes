@@ -79,17 +79,37 @@
       <label
         style="color: white; font-size: 13px; display: block; margin-top: 4px;"
       >
-        Geometry detail:
-        <select id="geometry-quality">
-          <option value="low">Low</option>
-          <option value="medium" selected>Medium</option>
-          <option value="high">High</option>
-        </select>
+        Pipe sides:
+        <input
+          id="pipe-sides"
+          type="number"
+          min="6"
+          max="32"
+          step="1"
+          value="14"
+          style="width: 60px; margin-left: 4px;"
+        />
+        <span style="font-size: 12px;">radial segments</span>
       </label>
       <label
         style="color: white; font-size: 13px; display: block; margin-top: 4px;"
       >
-        Thick pipes:
+        Joint smoothness:
+        <input
+          id="joint-segments"
+          type="number"
+          min="6"
+          max="32"
+          step="1"
+          value="12"
+          style="width: 60px; margin-left: 4px;"
+        />
+        <span style="font-size: 12px;">segments</span>
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
+        Thicc pipes:
         <input
           id="pipe-thickness-enabled"
           type="checkbox"
@@ -123,6 +143,19 @@
           min="0"
           step="1"
           value="2"
+          style="width: 60px; margin-left: 4px;"
+        />
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
+        Max pipes per scene:
+        <input
+          id="max-pipes-per-scene"
+          type="number"
+          min="1"
+          step="1"
+          value="6"
           style="width: 60px; margin-left: 4px;"
         />
       </label>

@@ -215,19 +215,9 @@ var Pipe = function(scene, options) {
       deltaVector.clone().normalize(),
       fromPoint
     );
-    // Segment counts depend on geometry quality
-    var radialSegments;
-    var heightSegments;
-    if (geometryQuality === "low") {
-      radialSegments = 8;
-      heightSegments = 3;
-    } else if (geometryQuality === "medium") {
-      radialSegments = 14;
-      heightSegments = 6;
-    } else {
-      radialSegments = 20;
-      heightSegments = 8;
-    }
+    // Segment counts driven by explicit pipe-sides override, with a sane default.
+    var radialSegments = pipeSidesOverride > 0 ? pipeSidesOverride : 14;
+    var heightSegments = Math.max(2, Math.round(radialSegments / 3));
     var length = deltaVector.length();
 
     var baseMaterial =
@@ -304,7 +294,7 @@ var Pipe = function(scene, options) {
     // inner and outer shells. Caps are children of the segment group,
     // so they move with the pipe as it grows.
     var ringSegments =
-      geometryQuality === "low" ? 8 : geometryQuality === "medium" ? 16 : 24;
+      pipeSidesOverride > 0 ? pipeSidesOverride : radialSegments * 1.2;
     var ringGeometry = new THREE.RingGeometry(
       innerRadius,
       pipeRadius,
@@ -389,13 +379,10 @@ var Pipe = function(scene, options) {
     scheduleGrow(segmentGroup, "segment");
   };
   var makeBallJoint = function(position) {
+    var segments = jointSegmentsOverride > 0 ? jointSegmentsOverride : 12;
     var ball = new THREE.Mesh(
       // Segment counts depend on geometry quality
-      new THREE.SphereGeometry(
-        ballJointRadius,
-        geometryQuality === "low" ? 8 : geometryQuality === "medium" ? 12 : 16,
-        geometryQuality === "low" ? 8 : geometryQuality === "medium" ? 12 : 16
-      ),
+      new THREE.SphereGeometry(ballJointRadius, segments, segments),
       createPieceMaterial()
     );
     ball.position.copy(position);
@@ -430,13 +417,10 @@ var Pipe = function(scene, options) {
     // self.object3d.add(elbow);
 
     // "elball" (not a proper elbow)
+    var segments = jointSegmentsOverride > 0 ? jointSegmentsOverride : 12;
     var elball = new THREE.Mesh(
       // Match ball joint smoothness / performance
-      new THREE.SphereGeometry(
-        pipeRadius,
-        geometryQuality === "low" ? 8 : geometryQuality === "medium" ? 12 : 16,
-        geometryQuality === "low" ? 8 : geometryQuality === "medium" ? 12 : 16
-      ),
+      new THREE.SphereGeometry(pipeRadius, segments, segments),
       createPieceMaterial()
     );
     elball.position.copy(fromPosition);
@@ -702,19 +686,13 @@ jointTypeSelect.addEventListener("change", function() {
 });
 
 // Quality controls
-var geometryQuality = "high"; // "low" | "medium" | "high"
 var resolutionScale = "retina"; // "normal" | "retina"
 var pipeThicknessEnabled = true;
 var pipeThicknessAmount = 0.3;
 var pipeThicknessMax = 3;
-
-var geometryQualitySelect = document.getElementById("geometry-quality");
-if (geometryQualitySelect) {
-  geometryQuality = geometryQualitySelect.value || geometryQuality;
-  geometryQualitySelect.addEventListener("change", function() {
-    geometryQuality = geometryQualitySelect.value || geometryQuality;
-  });
-}
+var pipeSidesOverride = 0;
+var jointSegmentsOverride = 0;
+var maxPipesPerScene = 0;
 
 var resolutionScaleSelect = document.getElementById("resolution-scale");
 if (resolutionScaleSelect) {
@@ -730,6 +708,9 @@ var pipeThicknessEnabledInput = document.getElementById(
 );
 var pipeThicknessAmountInput = document.getElementById("pipe-thickness-amount");
 var pipeThicknessMaxInput = document.getElementById("pipe-thickness-max");
+var pipeSidesInput = document.getElementById("pipe-sides");
+var jointSegmentsInput = document.getElementById("joint-segments");
+var maxPipesPerSceneInput = document.getElementById("max-pipes-per-scene");
 
 function updatePipeThicknessFromUI() {
   if (pipeThicknessEnabledInput) {
@@ -773,6 +754,42 @@ if (
   }
   if (pipeThicknessMaxInput) {
     pipeThicknessMaxInput.addEventListener("change", updatePipeThicknessFromUI);
+  }
+}
+
+function updateGeometryGranularFromUI() {
+  if (pipeSidesInput) {
+    var ps = parseInt(pipeSidesInput.value, 10);
+    if (!isFinite(ps) || ps < 0) ps = 0;
+    if (ps > 64) ps = 64;
+    pipeSidesOverride = ps;
+  }
+  if (jointSegmentsInput) {
+    var js = parseInt(jointSegmentsInput.value, 10);
+    if (!isFinite(js) || js < 0) js = 0;
+    if (js > 64) js = 64;
+    jointSegmentsOverride = js;
+  }
+  if (maxPipesPerSceneInput) {
+    var mp = parseInt(maxPipesPerSceneInput.value, 10);
+    if (!isFinite(mp) || mp < 0) mp = 0;
+    maxPipesPerScene = mp;
+  }
+}
+
+if (pipeSidesInput || jointSegmentsInput || maxPipesPerSceneInput) {
+  updateGeometryGranularFromUI();
+  if (pipeSidesInput) {
+    pipeSidesInput.addEventListener("change", updateGeometryGranularFromUI);
+  }
+  if (jointSegmentsInput) {
+    jointSegmentsInput.addEventListener("change", updateGeometryGranularFromUI);
+  }
+  if (maxPipesPerSceneInput) {
+    maxPipesPerSceneInput.addEventListener(
+      "change",
+      updateGeometryGranularFromUI
+    );
   }
 }
 
@@ -1599,7 +1616,11 @@ function stepOnce() {
       }
     }
     // TODO: create new pipes over time?
-    var pipeCount = 1 + options.multiple * (1 + chance(1 / 10));
+    var pipeCountBase = 1 + options.multiple * (1 + chance(1 / 10));
+    var pipeCount =
+      maxPipesPerScene > 0
+        ? Math.min(pipeCountBase, maxPipesPerScene)
+        : pipeCountBase;
     for (var i = 0; i < pipeCount; i++) {
       var pipeOptions = {
         teapotChance: basePipeOptions.teapotChance,
