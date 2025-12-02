@@ -31,6 +31,7 @@ var PIPE_DIRECTIONS = [
 // Shared geometry caches so we don't recreate small, similar meshes over and over.
 var ringGeometryCache = {};
 var sphereGeometryCache = {};
+var cylinderGeometryCache = {};
 
 function getRingGeometry(innerRadius, outerRadius, segments) {
   var key =
@@ -55,6 +56,39 @@ function getSphereGeometry(radius, segments) {
     );
   }
   return sphereGeometryCache[key];
+}
+
+function getCylinderGeometry(
+  radiusTop,
+  radiusBottom,
+  radialSegments,
+  heightSegments,
+  openEnded
+) {
+  var key =
+    radiusTop.toFixed(4) +
+    ":" +
+    radiusBottom.toFixed(4) +
+    ":" +
+    radialSegments +
+    ":" +
+    heightSegments +
+    ":" +
+    (openEnded ? 1 : 0);
+  if (!cylinderGeometryCache[key]) {
+    var geom = new THREE.CylinderGeometry(
+      radiusTop,
+      radiusBottom,
+      1,
+      radialSegments,
+      heightSegments,
+      openEnded
+    );
+    // Base at y=0, top at y=1.
+    geom.translate(0, 0.5, 0);
+    cylinderGeometryCache[key] = geom;
+  }
+  return cylinderGeometryCache[key];
 }
 
 // Track the last time any pipe successfully laid a new segment.
@@ -237,8 +271,11 @@ var Pipe = function(scene, options) {
     mesh.userData.growType = type;
     mesh.userData.growProgress = 0;
     if (type === "segment") {
-      // Grow along length only; radius stays full size.
-      mesh.scale.set(1, 0.01, 1);
+      // Grow along length only; radius stays full size. targetScaleY holds
+      // the final length of the segment; default to 1 if not specified.
+      var targetY = mesh.userData.targetScaleY || 1;
+      mesh.scale.set(1, 0.01 * targetY, 1);
+      mesh.userData.targetScaleY = targetY;
       mesh.userData.growFrames = SEGMENT_GROW_FRAMES;
     } else {
       // Joints grow uniformly from a point.
@@ -270,19 +307,18 @@ var Pipe = function(scene, options) {
 
     // Simple solid pipe when thickness is disabled: just one cylinder, no caps.
     if (!thicknessEnabled || pipeThicknessAmount <= 0) {
-      var solidGeometry = new THREE.CylinderGeometry(
+      var solidGeometry = getCylinderGeometry(
         pipeRadius,
         pipeRadius,
-        length,
         radialSegments,
         heightSegments,
         true
       );
-      solidGeometry.translate(0, length / 2, 0);
       var solidMesh = new THREE.Mesh(solidGeometry, baseMaterial);
       solidMesh.quaternion.copy(TMP_QUAT);
       solidMesh.position.copy(fromPoint);
       solidMesh.updateMatrix();
+      solidMesh.userData.targetScaleY = length;
       self.object3d.add(solidMesh);
       lastPipeAdvanceTime = performance.now();
       scheduleGrow(solidMesh, "segment");
@@ -290,30 +326,25 @@ var Pipe = function(scene, options) {
     }
 
     // Hollow tube: outer and inner shells plus optional end caps.
-    var outerGeometry = new THREE.CylinderGeometry(
+    var outerGeometry = getCylinderGeometry(
       pipeRadius,
       pipeRadius,
-      length,
       radialSegments,
       heightSegments,
       true
     );
-    // Move geometry so its base is at y=0 and it extends in +Y.
-    outerGeometry.translate(0, length / 2, 0);
 
     // Inner shell radius derived from configurable thicknessAmount.
     var innerRadius = pipeRadius * (1 - pipeThicknessAmount);
     // Clamp to avoid degenerate cases.
     innerRadius = Math.max(0.01, Math.min(pipeRadius - 0.01, innerRadius));
-    var innerGeometry = new THREE.CylinderGeometry(
+    var innerGeometry = getCylinderGeometry(
       innerRadius,
       innerRadius,
-      length,
       radialSegments,
       heightSegments,
       true
     );
-    innerGeometry.translate(0, length / 2, 0);
 
     var outerMesh = new THREE.Mesh(outerGeometry, baseMaterial);
 
@@ -331,6 +362,7 @@ var Pipe = function(scene, options) {
     // Anchor the base at fromPoint so the segment can grow outward.
     segmentGroup.position.copy(fromPoint);
     segmentGroup.updateMatrix();
+    segmentGroup.userData.targetScaleY = length;
 
     self.object3d.add(segmentGroup);
 
@@ -348,7 +380,8 @@ var Pipe = function(scene, options) {
 
     var ringStart = null;
     if (addStartCap) {
-      // Near-end cap (at the base of the segment), only when we changed direction
+      // Near-end cap (at the base of the segment), only when we changed direction.
+      // In unit-height space, base is at y=0.
       ringStart = new THREE.Mesh(ringGeometry, ringMaterial);
       ringStart.position.set(0, -0.001, 0);
       segmentGroup.add(ringStart);
@@ -356,7 +389,8 @@ var Pipe = function(scene, options) {
 
     // Far-end cap (at the tip of the segment) for the current head
     var ringEnd = new THREE.Mesh(ringGeometry, ringMaterial.clone());
-    ringEnd.position.set(0, length + 0.001, 0);
+    // In unit-height space, top is at y=1.
+    ringEnd.position.set(0, 1 + 0.001, 0);
     segmentGroup.add(ringEnd);
 
     segmentGroup.userData.startCap = ringStart;
