@@ -833,6 +833,9 @@ var options = {
   pipeShininess: 60,
   minPipesPerScene: 1,
   maxPipesPerScene: 6,
+  cameraMinDistance: 16,
+  cameraMaxDistance: 80,
+  cameraMaxOverheadDeg: 45,
   canOfWormsEnabled: true,
   canOfWormsChance: 1 / 200,
   canOfWormsMin: 10,
@@ -850,6 +853,12 @@ var pipeSidesOverride = 0;
 var jointSegmentsOverride = 0;
 var minPipesPerScene = 1;
 var maxPipesPerScene = 6;
+var sceneSizeX = 26;
+var sceneSizeY = 15;
+var sceneSizeZ = 20;
+var cameraMinDistance = 16;
+var cameraMaxDistance = 20;
+var cameraMaxOverheadDeg = 45;
 var turnTendencyMin = 0.2;
 var turnTendencyMax = 0.8;
 var pipeShininess = 60;
@@ -871,6 +880,14 @@ var pipeSidesInput = document.getElementById("pipe-sides");
 var jointSegmentsInput = document.getElementById("joint-segments");
 var minPipesPerSceneInput = document.getElementById("min-pipes-per-scene");
 var maxPipesPerSceneInput = document.getElementById("max-pipes-per-scene");
+var sceneSizeXInput = document.getElementById("scene-size-x");
+var sceneSizeYInput = document.getElementById("scene-size-y");
+var sceneSizeZInput = document.getElementById("scene-size-z");
+var cameraMinDistanceInput = document.getElementById("camera-min-distance");
+var cameraMaxDistanceInput = document.getElementById("camera-max-distance");
+var cameraMaxOverheadDegInput = document.getElementById(
+  "camera-max-overhead-deg"
+);
 
 function updatePipeThicknessFromUI() {
   if (pipeThicknessEnabledInput) {
@@ -933,13 +950,63 @@ function updateGeometryGranularFromUI() {
   maxPipesPerScene = maxP;
   options.minPipesPerScene = minP;
   options.maxPipesPerScene = maxP;
+
+  // Scene dimensions (full width/height/depth in world units).
+  var sx = sceneSizeX;
+  var sy = sceneSizeY;
+  var sz = sceneSizeZ;
+  if (sceneSizeXInput) {
+    var vx = parseFloat(sceneSizeXInput.value);
+    if (!isFinite(vx) || vx < 4) vx = 4;
+    sx = vx;
+  }
+  if (sceneSizeYInput) {
+    var vy = parseFloat(sceneSizeYInput.value);
+    if (!isFinite(vy) || vy < 4) vy = 4;
+    sy = vy;
+  }
+  if (sceneSizeZInput) {
+    var vz = parseFloat(sceneSizeZInput.value);
+    if (!isFinite(vz) || vz < 4) vz = 4;
+    sz = vz;
+  }
+  sceneSizeX = sx;
+  sceneSizeY = sy;
+  sceneSizeZ = sz;
+  options.sceneSizeX = sx;
+  options.sceneSizeY = sy;
+  options.sceneSizeZ = sz;
+
+  applySceneBounds();
+}
+
+function updateCameraDistanceSettingsFromUI() {
+  var minD = cameraMinDistance;
+  var maxD = cameraMaxDistance;
+  if (cameraMinDistanceInput) {
+    var vMin = parseFloat(cameraMinDistanceInput.value);
+    if (!isFinite(vMin) || vMin < 1) vMin = 1;
+    minD = vMin;
+  }
+  if (cameraMaxDistanceInput) {
+    var vMax = parseFloat(cameraMaxDistanceInput.value);
+    if (!isFinite(vMax) || vMax < minD) vMax = minD;
+    maxD = vMax;
+  }
+  cameraMinDistance = minD;
+  cameraMaxDistance = maxD;
+  options.cameraMinDistance = minD;
+  options.cameraMaxDistance = maxD;
 }
 
 if (
   pipeSidesInput ||
   jointSegmentsInput ||
   minPipesPerSceneInput ||
-  maxPipesPerSceneInput
+  maxPipesPerSceneInput ||
+  sceneSizeXInput ||
+  sceneSizeYInput ||
+  sceneSizeZInput
 ) {
   updateGeometryGranularFromUI();
   if (pipeSidesInput) {
@@ -960,6 +1027,51 @@ if (
       updateGeometryGranularFromUI
     );
   }
+  if (sceneSizeXInput) {
+    sceneSizeXInput.addEventListener("change", updateGeometryGranularFromUI);
+  }
+  if (sceneSizeYInput) {
+    sceneSizeYInput.addEventListener("change", updateGeometryGranularFromUI);
+  }
+  if (sceneSizeZInput) {
+    sceneSizeZInput.addEventListener("change", updateGeometryGranularFromUI);
+  }
+}
+
+if (cameraMinDistanceInput || cameraMaxDistanceInput) {
+  updateCameraDistanceSettingsFromUI();
+  if (cameraMinDistanceInput) {
+    cameraMinDistanceInput.addEventListener(
+      "change",
+      updateCameraDistanceSettingsFromUI
+    );
+  }
+  if (cameraMaxDistanceInput) {
+    cameraMaxDistanceInput.addEventListener(
+      "change",
+      updateCameraDistanceSettingsFromUI
+    );
+  }
+}
+
+function updateCameraOverheadFromUI() {
+  var d = cameraMaxOverheadDeg;
+  if (cameraMaxOverheadDegInput) {
+    var v = parseFloat(cameraMaxOverheadDegInput.value);
+    if (!isFinite(v) || v < 0) v = 0;
+    if (v > 90) v = 90;
+    d = v;
+  }
+  cameraMaxOverheadDeg = d;
+  options.cameraMaxOverheadDeg = d;
+}
+
+if (cameraMaxOverheadDegInput) {
+  updateCameraOverheadFromUI();
+  cameraMaxOverheadDegInput.addEventListener(
+    "change",
+    updateCameraOverheadFromUI
+  );
 }
 
 // Speed control elements
@@ -1540,6 +1652,37 @@ var snowAreaHalfSize = 14;
 var snowYTop = 12;
 var snowYBottom = -10;
 var lastSnowUpdateTime = performance.now();
+
+// Apply the current scene width/height/depth to the simulation bounds and
+// snow volume so things scale with user settings.
+function applySceneBounds() {
+  var sx = options.sceneSizeX || sceneSizeX || 20;
+  var sy = options.sceneSizeY || sceneSizeY || 20;
+  var sz = options.sceneSizeZ || sceneSizeZ || 20;
+  if (!isFinite(sx) || sx < 4) sx = 4;
+  if (!isFinite(sy) || sy < 4) sy = 4;
+  if (!isFinite(sz) || sz < 4) sz = 4;
+  sceneSizeX = sx;
+  sceneSizeY = sy;
+  sceneSizeZ = sz;
+  options.sceneSizeX = sx;
+  options.sceneSizeY = sy;
+  options.sceneSizeZ = sz;
+
+  var halfX = sx / 2;
+  var halfY = sy / 2;
+  var halfZ = sz / 2;
+
+  // Update the integer grid the pipes occupy.
+  gridBounds.min.set(-halfX, -halfY, -halfZ);
+  gridBounds.max.set(halfX, halfY, halfZ);
+
+  // Expand the snow volume slightly beyond the pipe volume so flakes
+  // can fall around the edges.
+  snowAreaHalfSize = Math.max(halfX, halfZ) + 2;
+  snowYTop = halfY + 2;
+  snowYBottom = -halfY - 2;
+}
 
 function getSnowTexture() {
   if (snowTexture) {
@@ -2175,22 +2318,120 @@ function animate() {
 }
 
 function look() {
+  // Compute half-extents of the current scene volume.
+  var sx = options.sceneSizeX || sceneSizeX || 20;
+  var sy = options.sceneSizeY || sceneSizeY || 20;
+  var sz = options.sceneSizeZ || sceneSizeZ || 20;
+  var halfX = sx / 2;
+  var halfY = sy / 2;
+  var halfZ = sz / 2;
+
+  // Update camera distance so the longest side of the volume comfortably
+  // fits within the vertical FOV.
+  var maxHalf = Math.max(halfX, halfY, halfZ);
+  var fovRad = (camera.fov * Math.PI) / 180;
+  var required = maxHalf / Math.tan(fovRad / 2);
+  var desired = required * 1.2;
+  var minD = options.cameraMinDistance || cameraMinDistance || 1;
+  var maxD = options.cameraMaxDistance || cameraMaxDistance || 1000;
+  if (!isFinite(minD) || minD < 1) minD = 1;
+  if (!isFinite(maxD) || maxD < minD) maxD = minD;
+  CAMERA_DISTANCE = Math.min(Math.max(desired, minD), maxD);
+
+  // Longest axis in world space: used to avoid looking straight down it.
+  var longestAxis;
+  if (sx >= sy && sx >= sz) {
+    longestAxis = new THREE.Vector3(1, 0, 0);
+  } else if (sy >= sx && sy >= sz) {
+    longestAxis = new THREE.Vector3(0, 1, 0);
+  } else {
+    longestAxis = new THREE.Vector3(0, 0, 1);
+  }
+
   // TODO: never don't change the view (except maybe while clearing)
   if (chance(1 / 2)) {
-    // head-on view
-    camera.position.set(0, 0, CAMERA_DISTANCE);
+    // Head-on view: choose one of the cardinal directions that's not
+    // aligned with the longest scene axis so the longest side is visible
+    // across the screen rather than along the view direction.
+    var candidates = [
+      new THREE.Vector3(1, 0, 0),
+      new THREE.Vector3(-1, 0, 0),
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(0, -1, 0),
+      new THREE.Vector3(0, 0, 1),
+      new THREE.Vector3(0, 0, -1),
+    ];
+    var filtered = candidates.filter(function(dir) {
+      return Math.abs(dir.dot(longestAxis)) < 0.8;
+    });
+    if (!filtered.length) {
+      filtered = candidates;
+    }
+    var baseDir = filtered[Math.floor(Math.random() * filtered.length)];
+    var headPos = baseDir.clone().multiplyScalar(CAMERA_DISTANCE);
+    // keep the camera at or above the pipes so lighting looks good
+    if (headPos.y < 0) {
+      headPos.y = -headPos.y;
+    }
+    // Clamp overhead: limit how far above the horizon we can go.
+    var maxOverheadDeg =
+      options.cameraMaxOverheadDeg || cameraMaxOverheadDeg || 90;
+    if (!isFinite(maxOverheadDeg) || maxOverheadDeg < 0) maxOverheadDeg = 0;
+    if (maxOverheadDeg > 90) maxOverheadDeg = 90;
+    var maxOverheadRad = (maxOverheadDeg * Math.PI) / 180;
+    var maxY = Math.sin(maxOverheadRad);
+    var hpLen = headPos.length();
+    if (hpLen > 0 && headPos.y / hpLen > maxY) {
+      var clampedY = maxY * hpLen;
+      var horizLen = Math.sqrt(
+        Math.max(hpLen * hpLen - clampedY * clampedY, 0.0001)
+      );
+      var origHorizLen = Math.sqrt(
+        headPos.x * headPos.x + headPos.z * headPos.z
+      );
+      var scale = horizLen / (origHorizLen || horizLen);
+      headPos.set(headPos.x * scale, clampedY, headPos.z * scale);
+    }
+    camera.position.copy(headPos);
   } else {
-    // random view
+    // Random view: start from +X at the right distance and apply a
+    // quarter-turn around a random axis, rejecting orientations that
+    // look too far down the longest axis.
     var vector = new THREE.Vector3(CAMERA_DISTANCE, 0, 0);
-
-    var axis = new THREE.Vector3(random(-1, 1), random(-1, 1), random(-1, 1));
+    var axis = new THREE.Vector3();
     var angle = Math.PI / 2;
-    var matrix = new THREE.Matrix4().makeRotationAxis(axis, angle);
-
-    vector.applyMatrix4(matrix);
+    var matrix = new THREE.Matrix4();
+    var attempts = 0;
+    while (attempts < 8) {
+      axis.set(random(-1, 1), random(-1, 1), random(-1, 1));
+      matrix.makeRotationAxis(axis, angle);
+      vector.set(CAMERA_DISTANCE, 0, 0).applyMatrix4(matrix);
+      var vNorm = vector.clone().normalize();
+      if (Math.abs(vNorm.dot(longestAxis)) < 0.8) {
+        break;
+      }
+      attempts++;
+    }
     // keep the camera at or above the pipes so lighting looks good
     if (vector.y < 0) {
       vector.y = -vector.y;
+    }
+    // Clamp overhead: limit how far above the horizon we can go.
+    var maxOverheadDeg2 =
+      options.cameraMaxOverheadDeg || cameraMaxOverheadDeg || 90;
+    if (!isFinite(maxOverheadDeg2) || maxOverheadDeg2 < 0) maxOverheadDeg2 = 0;
+    if (maxOverheadDeg2 > 90) maxOverheadDeg2 = 90;
+    var maxOverheadRad2 = (maxOverheadDeg2 * Math.PI) / 180;
+    var maxY2 = Math.sin(maxOverheadRad2);
+    var vLen = vector.length();
+    if (vLen > 0 && vector.y / vLen > maxY2) {
+      var clampedY2 = maxY2 * vLen;
+      var horizLen2 = Math.sqrt(
+        Math.max(vLen * vLen - clampedY2 * clampedY2, 0.0001)
+      );
+      var origHorizLen2 = Math.sqrt(vector.x * vector.x + vector.z * vector.z);
+      var scale2 = horizLen2 / (origHorizLen2 || horizLen2);
+      vector.set(vector.x * scale2, clampedY2, vector.z * scale2);
     }
     camera.position.copy(vector);
   }
@@ -2335,6 +2576,7 @@ updateFadeCurveFromUI();
 updateFadeStretchFromUI();
 updateInitialVanillaScenesFromUI();
 updateIdleCutoffSecondsFromUI();
+applySceneBounds();
 rebuildSnowSystem();
 animate();
 
