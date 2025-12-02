@@ -115,6 +115,12 @@ var Pipe = function(scene, options) {
   var ballJointRadius = pipeRadius * 1.5;
   var teapotSize = ballJointRadius;
 
+  // Per-pipe tendency to make turns rather than go straight.
+  // 0 → strongly prefers to continue straight when possible.
+  // 1 → strongly prefers to turn whenever there's room.
+  self.turnTendency =
+    typeof options.turnTendency === "number" ? options.turnTendency : 0.5;
+
   // How many animation frames new geometry takes to grow in.
   var SEGMENT_GROW_FRAMES = 8;
   var JOINT_GROW_FRAMES = 6;
@@ -585,21 +591,49 @@ var Pipe = function(scene, options) {
       lastDirectionVector = TMP_VEC_B;
     }
 
-    // Choose a primary direction, preferring to continue straight when possible.
+    // Choose a primary direction, with a per-pipe bias toward turning or
+    // continuing straight. turnTendency is the probability of *trying* to
+    // turn when there's a previous direction available.
     var primaryDirection = null;
-    if (lastDirectionVector && chance(1 / 2)) {
-      // Map lastDirectionVector to one of the canonical PIPE_DIRECTIONS.
-      for (var li = 0; li < PIPE_DIRECTIONS.length; li++) {
-        if (PIPE_DIRECTIONS[li].equals(lastDirectionVector)) {
-          primaryDirection = PIPE_DIRECTIONS[li];
-          break;
+    var bias = self.turnTendency;
+    if (!isFinite(bias)) {
+      bias = 0.5;
+    }
+    if (bias < 0) bias = 0;
+    if (bias > 1) bias = 1;
+
+    if (lastDirectionVector) {
+      if (!chance(bias)) {
+        // Prefer to keep going straight: map lastDirectionVector to one of
+        // the canonical PIPE_DIRECTIONS.
+        for (var li = 0; li < PIPE_DIRECTIONS.length; li++) {
+          if (PIPE_DIRECTIONS[li].equals(lastDirectionVector)) {
+            primaryDirection = PIPE_DIRECTIONS[li];
+            break;
+          }
+        }
+        // Fallback if it somehow didn't match exactly.
+        if (!primaryDirection) {
+          primaryDirection = PIPE_DIRECTIONS[0];
+        }
+      } else {
+        // Intentionally try to turn: pick a direction different from the
+        // previous one, if possible.
+        var turnCandidates = [];
+        for (var ti = 0; ti < PIPE_DIRECTIONS.length; ti++) {
+          if (!PIPE_DIRECTIONS[ti].equals(lastDirectionVector)) {
+            turnCandidates.push(PIPE_DIRECTIONS[ti]);
+          }
+        }
+        if (turnCandidates.length > 0) {
+          primaryDirection =
+            turnCandidates[Math.floor(Math.random() * turnCandidates.length)];
+        } else {
+          primaryDirection = PIPE_DIRECTIONS[0];
         }
       }
-      // Fallback if it somehow didn't match exactly.
-      if (!primaryDirection) {
-        primaryDirection = PIPE_DIRECTIONS[0];
-      }
     } else {
+      // No previous direction yet; start in a random direction.
       primaryDirection = PIPE_DIRECTIONS[chooseFrom([0, 1, 2, 3, 4, 5])];
     }
 
@@ -748,6 +782,8 @@ var options = {
   thicknessEnabled: true,
   thicknessAmount: 0.3,
   maxThickPipesPerScene: 3,
+  turnTendencyMin: 0.2,
+  turnTendencyMax: 0.8,
 };
 jointTypeSelect.addEventListener("change", function() {
   options.joints = jointTypeSelect.value;
@@ -761,6 +797,8 @@ var pipeThicknessMax = 3;
 var pipeSidesOverride = 0;
 var jointSegmentsOverride = 0;
 var maxPipesPerScene = 0;
+var turnTendencyMin = 0.2;
+var turnTendencyMax = 0.8;
 
 var resolutionScaleSelect = document.getElementById("resolution-scale");
 if (resolutionScaleSelect) {
@@ -902,6 +940,8 @@ var fadeStretchDisplay = document.getElementById("fade-stretch-display");
 var initialVanillaScenesInput = document.getElementById(
   "initial-vanilla-scenes"
 );
+var turnTendencyMinInput = document.getElementById("turn-tendency-min");
+var turnTendencyMaxInput = document.getElementById("turn-tendency-max");
 var transitionTypeRadios = document.querySelectorAll(
   'input[name="transition-type"]'
 );
@@ -1107,6 +1147,51 @@ if (initialVanillaScenesInput) {
     "change",
     updateInitialVanillaScenesFromUI
   );
+}
+
+function updateTurnTendencyFromUI() {
+  var minVal = turnTendencyMin;
+  var maxVal = turnTendencyMax;
+  if (turnTendencyMinInput) {
+    var vMin = parseFloat(turnTendencyMinInput.value);
+    if (!isFinite(vMin)) vMin = 0;
+    if (vMin < 0) vMin = 0;
+    if (vMin > 1) vMin = 1;
+    minVal = vMin;
+  }
+  if (turnTendencyMaxInput) {
+    var vMax = parseFloat(turnTendencyMaxInput.value);
+    if (!isFinite(vMax)) vMax = 1;
+    if (vMax < 0) vMax = 0;
+    if (vMax > 1) vMax = 1;
+    maxVal = vMax;
+  }
+  if (maxVal < minVal) {
+    // Swap to keep the range sane.
+    var tmp = minVal;
+    minVal = maxVal;
+    maxVal = tmp;
+  }
+  turnTendencyMin = minVal;
+  turnTendencyMax = maxVal;
+  options.turnTendencyMin = minVal;
+  options.turnTendencyMax = maxVal;
+  if (turnTendencyMinInput) {
+    turnTendencyMinInput.value = minVal.toFixed(2);
+  }
+  if (turnTendencyMaxInput) {
+    turnTendencyMaxInput.value = maxVal.toFixed(2);
+  }
+}
+
+if (turnTendencyMinInput || turnTendencyMaxInput) {
+  updateTurnTendencyFromUI();
+  if (turnTendencyMinInput) {
+    turnTendencyMinInput.addEventListener("change", updateTurnTendencyFromUI);
+  }
+  if (turnTendencyMaxInput) {
+    turnTendencyMaxInput.addEventListener("change", updateTurnTendencyFromUI);
+  }
 }
 
 if (transitionTypeRadios && transitionTypeRadios.length) {
@@ -1690,11 +1775,30 @@ function stepOnce() {
         ? Math.min(pipeCountBase, maxPipesPerScene)
         : pipeCountBase;
     for (var i = 0; i < pipeCount; i++) {
+      // Sample a per-pipe turn tendency within the configured range.
+      var tMin = isFinite(options.turnTendencyMin)
+        ? options.turnTendencyMin
+        : turnTendencyMin;
+      var tMax = isFinite(options.turnTendencyMax)
+        ? options.turnTendencyMax
+        : turnTendencyMax;
+      if (!isFinite(tMin)) tMin = 0.2;
+      if (!isFinite(tMax)) tMax = 0.8;
+      if (tMax < tMin) {
+        var tTmp = tMin;
+        tMin = tMax;
+        tMax = tTmp;
+      }
+      if (tMin < 0) tMin = 0;
+      if (tMax > 1) tMax = 1;
+      var perPipeTurnTendency = random(tMin, tMax);
+
       var pipeOptions = {
         teapotChance: basePipeOptions.teapotChance,
         ballJointChance: basePipeOptions.ballJointChance,
         texturePath: basePipeOptions.texturePath,
         colorMode: "normal",
+        turnTendency: perPipeTurnTendency,
       };
       if (!inIntroVanillaPhase && options.multiColorEnabled) {
         if (chance(options.multiColorSchemePipeChance)) {

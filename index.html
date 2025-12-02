@@ -109,6 +109,36 @@
       <label
         style="color: white; font-size: 13px; display: block; margin-top: 4px;"
       >
+        Turn tendency min:
+        <input
+          id="turn-tendency-min"
+          type="number"
+          min="0"
+          max="1"
+          step="0.05"
+          value="0.2"
+          style="width: 60px; margin-left: 4px;"
+        />
+        <span style="font-size: 12px;">0 = very straight</span>
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
+        Turn tendency max:
+        <input
+          id="turn-tendency-max"
+          type="number"
+          min="0"
+          max="1"
+          step="0.05"
+          value="0.8"
+          style="width: 60px; margin-left: 4px;"
+        />
+        <span style="font-size: 12px;">1 = very wiggly</span>
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
         Thicc pipes:
         <input
           id="pipe-thickness-enabled"
