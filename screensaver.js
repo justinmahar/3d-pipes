@@ -22,6 +22,8 @@ var textures = {};
 var Pipe = function(scene, options) {
   var self = this;
   var pipeRadius = 0.2;
+  // Visual wall thickness for hollow pipes.
+  var pipeWallThickness = 0.06;
   var ballJointRadius = pipeRadius * 1.5;
   var teapotSize = ballJointRadius;
 
@@ -35,6 +37,7 @@ var Pipe = function(scene, options) {
   self.palette = null;
   self.paletteIndex = 0;
   self.stuckDecorated = false;
+  self.segments = [];
   if (self.colorMode === "scheme") {
     self.colorScheme = chooseFrom([
       "red",
@@ -190,7 +193,12 @@ var Pipe = function(scene, options) {
     }
     self.growingParts.push(mesh);
   }
-  var makeCylinderBetweenPoints = function(fromPoint, toPoint, material) {
+  var makeCylinderBetweenPoints = function(
+    fromPoint,
+    toPoint,
+    material,
+    addStartCap
+  ) {
     var deltaVector = new THREE.Vector3().subVectors(toPoint, fromPoint);
     var arrow = new THREE.ArrowHelper(
       deltaVector.clone().normalize(),
@@ -210,7 +218,9 @@ var Pipe = function(scene, options) {
       heightSegments = 8;
     }
     var length = deltaVector.length();
-    var geometry = new THREE.CylinderGeometry(
+
+    // Outer shell
+    var outerGeometry = new THREE.CylinderGeometry(
       pipeRadius,
       pipeRadius,
       length,
@@ -219,21 +229,114 @@ var Pipe = function(scene, options) {
       true
     );
     // Move geometry so its base is at y=0 and it extends in +Y.
-    geometry.translate(0, length / 2, 0);
-    var mesh = new THREE.Mesh(
-      geometry,
-      self.colorMode === "normal" ? material : createPieceMaterial()
+    outerGeometry.translate(0, length / 2, 0);
+
+    // Inner shell for hollow pipe. Clamp inner radius so walls aren't paper thin.
+    var innerRadius = Math.max(
+      pipeRadius - pipeWallThickness,
+      pipeRadius * 0.4
     );
+    var innerGeometry = new THREE.CylinderGeometry(
+      innerRadius,
+      innerRadius,
+      length,
+      radialSegments,
+      heightSegments,
+      true
+    );
+    innerGeometry.translate(0, length / 2, 0);
 
-    mesh.rotation.setFromQuaternion(arrow.quaternion);
+    var baseMaterial =
+      self.colorMode === "normal" ? material : createPieceMaterial();
+    var outerMesh = new THREE.Mesh(outerGeometry, baseMaterial);
+
+    // Inner surface uses back-face rendering so we see the inside of the tube.
+    var innerMaterial = baseMaterial.clone();
+    innerMaterial.side = THREE.BackSide;
+    var innerMesh = new THREE.Mesh(innerGeometry, innerMaterial);
+
+    // Group inner and outer so they grow together as one segment.
+    var segmentGroup = new THREE.Object3D();
+    segmentGroup.add(outerMesh);
+    segmentGroup.add(innerMesh);
+
+    segmentGroup.rotation.setFromQuaternion(arrow.quaternion);
     // Anchor the base at fromPoint so the segment can grow outward.
-    mesh.position.copy(fromPoint);
-    mesh.updateMatrix();
+    segmentGroup.position.copy(fromPoint);
+    segmentGroup.updateMatrix();
 
-    self.object3d.add(mesh);
+    self.object3d.add(segmentGroup);
+
+    // Add flat ring caps at BOTH ends of this hollow segment so that
+    // looking down the pipe you see a clean ring, not a gap between
+    // inner and outer shells. Caps are children of the segment group,
+    // so they move with the pipe as it grows.
+    var ringSegments =
+      geometryQuality === "low" ? 8 : geometryQuality === "medium" ? 16 : 24;
+    var ringGeometry = new THREE.RingGeometry(
+      innerRadius,
+      pipeRadius,
+      ringSegments
+    );
+    // Make the ring's normal point along +Y (pipe axis in local space)
+    // so it faces out of the pipe ends when the segment group is rotated.
+    ringGeometry.rotateX(-Math.PI / 2);
+    var ringMaterial = baseMaterial.clone();
+    ringMaterial.side = THREE.DoubleSide;
+
+    var ringStart = null;
+    if (addStartCap) {
+      // Near-end cap (at the base of the segment), only when we changed direction
+      ringStart = new THREE.Mesh(ringGeometry, ringMaterial);
+      ringStart.position.set(0, -0.001, 0);
+      segmentGroup.add(ringStart);
+    }
+
+    // Far-end cap (at the tip of the segment) for the current head
+    var ringEnd = new THREE.Mesh(ringGeometry.clone(), ringMaterial.clone());
+    ringEnd.position.set(0, length + 0.001, 0);
+    segmentGroup.add(ringEnd);
+
+    segmentGroup.userData.startCap = ringStart;
+    segmentGroup.userData.endCap = ringEnd;
+
+    // Track segments so we can disable caps on older ones (keep caps only
+    // for the current head segment and the one before it).
+    self.segments.push(segmentGroup);
+    if (self.segments.length > 2) {
+      for (var si = 0; si < self.segments.length - 2; si++) {
+        var seg = self.segments[si];
+        if (!seg || !seg.userData) continue;
+        if (seg.userData.startCap) {
+          if (seg.userData.startCap.parent) {
+            seg.userData.startCap.parent.remove(seg.userData.startCap);
+          }
+          if (seg.userData.startCap.geometry) {
+            seg.userData.startCap.geometry.dispose();
+          }
+          if (seg.userData.startCap.material) {
+            seg.userData.startCap.material.dispose();
+          }
+          seg.userData.startCap = null;
+        }
+        if (seg.userData.endCap) {
+          if (seg.userData.endCap.parent) {
+            seg.userData.endCap.parent.remove(seg.userData.endCap);
+          }
+          if (seg.userData.endCap.geometry) {
+            seg.userData.endCap.geometry.dispose();
+          }
+          if (seg.userData.endCap.material) {
+            seg.userData.endCap.material.dispose();
+          }
+          seg.userData.endCap = null;
+        }
+      }
+    }
+
     // Mark time whenever a new segment is successfully laid.
     lastPipeAdvanceTime = performance.now();
-    scheduleGrow(mesh, "segment");
+    scheduleGrow(segmentGroup, "segment");
   };
   var makeBallJoint = function(position) {
     var ball = new THREE.Mesh(
@@ -471,7 +574,14 @@ var Pipe = function(scene, options) {
     }
 
     // pipe
-    makeCylinderBetweenPoints(self.currentPosition, newPosition, self.material);
+    var changedDirection =
+      lastDirectionVector && !lastDirectionVector.equals(directionVector);
+    makeCylinderBetweenPoints(
+      self.currentPosition,
+      newPosition,
+      self.material,
+      changedDirection
+    );
 
     // update
     self.currentPosition = newPosition;
