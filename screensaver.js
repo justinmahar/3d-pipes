@@ -22,12 +22,10 @@ var textures = {};
 var Pipe = function(scene, options) {
   var self = this;
   var pipeRadius = 0.2;
-  var thicknessEnabled =
-    typeof options.thicknessEnabled === "boolean"
-      ? options.thicknessEnabled
-      : true;
-  var thicknessAmount =
-    typeof options.thicknessAmount === "number" ? options.thicknessAmount : 0.3;
+  // Use global thickness settings so the UI toggle and slider take
+  // immediate effect for newly created pipes.
+  var thicknessEnabled = pipeThicknessEnabled;
+  var thicknessAmount = pipeThicknessAmount;
   if (!isFinite(thicknessAmount) || thicknessAmount < 0) {
     thicknessAmount = 0;
   } else if (thicknessAmount > 1) {
