@@ -132,6 +132,8 @@ var Pipe = function(scene, options) {
   self.paletteIndex = 0;
   self.stuckDecorated = false;
   self.segments = [];
+  // Number of pipe segments laid so far (used for multicolor striping logic).
+  self.segmentCount = 0;
   if (self.colorMode === "scheme") {
     self.colorScheme = chooseFrom([
       "red",
@@ -258,6 +260,24 @@ var Pipe = function(scene, options) {
   }
 
   buildPalette();
+  // Track the most recently used segment material so joints can reuse its
+  // color without advancing the palette. For normal pipes this is just
+  // the base material; for multicolor pipes we precompute a first material
+  // so the starting joint matches the first pipe segment.
+  self.lastSegmentMaterial = self.material;
+  if (self.colorMode !== "normal" && self.palette && self.palette.length) {
+    var firstColor = self.palette[0];
+    var firstEmissive = new THREE.Color(firstColor).multiplyScalar(0.3);
+    self.lastSegmentMaterial = new THREE.MeshPhongMaterial({
+      specular: 0xa9fcff,
+      color: firstColor,
+      emissive: firstEmissive,
+      shininess: pipeShininess,
+    });
+    // Start subsequent palette picks from index 1 so the first segment and
+    // the initial joint share the same color.
+    self.paletteIndex = 1;
+  }
 
   function createPieceMaterial() {
     if (self.colorMode === "normal" || !self.palette || !self.palette.length) {
@@ -266,12 +286,14 @@ var Pipe = function(scene, options) {
     var color = self.palette[self.paletteIndex % self.palette.length];
     self.paletteIndex += 1;
     var emissive = new THREE.Color(color).multiplyScalar(0.3);
-    return new THREE.MeshPhongMaterial({
+    var mat = new THREE.MeshPhongMaterial({
       specular: 0xa9fcff,
       color: color,
       emissive: emissive,
       shininess: pipeShininess,
     });
+    self.lastSegmentMaterial = mat;
+    return mat;
   }
   function scheduleGrow(mesh, type) {
     mesh.userData.growType = type;
@@ -308,8 +330,19 @@ var Pipe = function(scene, options) {
     var radialSegments = pipeSidesOverride > 0 ? pipeSidesOverride : 14;
     var heightSegments = Math.max(2, Math.round(radialSegments / 3));
 
-    var baseMaterial =
-      self.colorMode === "normal" ? material : createPieceMaterial();
+    var baseMaterial;
+    if (self.colorMode === "normal") {
+      baseMaterial = material;
+    } else {
+      // For the very first segment, reuse the precomputed first segment
+      // material so it matches the starting joint color. Subsequent
+      // segments advance the palette.
+      if (self.segmentCount === 0 && self.lastSegmentMaterial) {
+        baseMaterial = self.lastSegmentMaterial;
+      } else {
+        baseMaterial = createPieceMaterial();
+      }
+    }
 
     // Simple solid pipe when thickness is disabled: just one cylinder, no caps.
     if (!thicknessEnabled || pipeThicknessAmount <= 0) {
@@ -328,6 +361,7 @@ var Pipe = function(scene, options) {
       self.object3d.add(solidMesh);
       lastPipeAdvanceTime = performance.now();
       scheduleGrow(solidMesh, "segment");
+      self.segmentCount += 1;
       return;
     }
 
@@ -452,13 +486,18 @@ var Pipe = function(scene, options) {
     // Mark time whenever a new segment is successfully laid.
     lastPipeAdvanceTime = performance.now();
     scheduleGrow(segmentGroup, "segment");
+    self.segmentCount += 1;
   };
   var makeBallJoint = function(position) {
     var segments = jointSegmentsOverride > 0 ? jointSegmentsOverride : 12;
+    var jointMaterial =
+      self.colorMode === "normal" || !self.lastSegmentMaterial
+        ? self.material
+        : self.lastSegmentMaterial;
     var ball = new THREE.Mesh(
       // Segment counts depend on geometry quality
       getSphereGeometry(ballJointRadius, segments),
-      createPieceMaterial()
+      jointMaterial
     );
     ball.position.copy(position);
     self.object3d.add(ball);
@@ -469,9 +508,13 @@ var Pipe = function(scene, options) {
     //teapotTexture.repeat.set(1, 1);
 
     // THREE.TeapotBufferGeometry = function ( size, segments, bottom, lid, body, fitLid, blinn )
+    var jointMaterial =
+      self.colorMode === "normal" || !self.lastSegmentMaterial
+        ? self.material
+        : self.lastSegmentMaterial;
     var teapot = new THREE.Mesh(
       new THREE.TeapotBufferGeometry(teapotSize, true, true, true, true, true),
-      createPieceMaterial()
+      jointMaterial
       //new THREE.MeshLambertMaterial({ map: teapotTexture })
     );
     teapot.position.copy(position);
@@ -493,10 +536,14 @@ var Pipe = function(scene, options) {
 
     // "elball" (not a proper elbow)
     var segments = jointSegmentsOverride > 0 ? jointSegmentsOverride : 12;
+    var jointMaterial =
+      self.colorMode === "normal" || !self.lastSegmentMaterial
+        ? self.material
+        : self.lastSegmentMaterial;
     var elball = new THREE.Mesh(
       // Match ball joint smoothness / performance
       getSphereGeometry(pipeRadius, segments),
-      createPieceMaterial()
+      jointMaterial
     );
     elball.position.copy(fromPosition);
     self.object3d.add(elball);
@@ -1842,7 +1889,13 @@ function stepOnce() {
         colorMode: "normal",
         turnTendency: perPipeTurnTendency,
       };
-      if (!inIntroVanillaPhase && options.multiColorEnabled) {
+      // In a candycane scene, *all* pipes must use the candycane texture,
+      // so multicolor modes are disabled for that scene.
+      if (
+        !inIntroVanillaPhase &&
+        options.multiColorEnabled &&
+        !options.isCandyScene
+      ) {
         if (chance(options.multiColorSchemePipeChance)) {
           pipeOptions.colorMode = "scheme";
         } else if (chance(options.multiColorRandomPipeChance)) {
