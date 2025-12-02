@@ -362,6 +362,24 @@ var Pipe = function(scene, options) {
           seg.userData.endCap = null;
         }
       }
+      // Additionally, if we did NOT change direction for this new head
+      // segment, remove the end cap from the immediate previous segment,
+      // since a straight run doesn't need a visible boundary ring.
+      if (!addStartCap && self.segments.length >= 2) {
+        var prevSeg = self.segments[self.segments.length - 2];
+        if (prevSeg && prevSeg.userData && prevSeg.userData.endCap) {
+          if (prevSeg.userData.endCap.parent) {
+            prevSeg.userData.endCap.parent.remove(prevSeg.userData.endCap);
+          }
+          if (prevSeg.userData.endCap.geometry) {
+            prevSeg.userData.endCap.geometry.dispose();
+          }
+          if (prevSeg.userData.endCap.material) {
+            prevSeg.userData.endCap.material.dispose();
+          }
+          prevSeg.userData.endCap = null;
+        }
+      }
     }
 
     // Mark time whenever a new segment is successfully laid.
