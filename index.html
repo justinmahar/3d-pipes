@@ -89,6 +89,33 @@
       <label
         style="color: white; font-size: 13px; display: block; margin-top: 4px;"
       >
+        Thick pipes:
+        <input
+          id="pipe-thickness-enabled"
+          type="checkbox"
+          checked="checked"
+          style="margin-left: 4px; margin-right: 4px;"
+        />
+        <span style="font-size: 12px;">use hollow tubes</span>
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
+        Pipe wall thickness:
+        <input
+          id="pipe-thickness-amount"
+          type="number"
+          min="0"
+          max="1"
+          step="0.05"
+          value="0.2"
+          style="width: 60px; margin-left: 4px;"
+        />
+        <span style="font-size: 12px;">× radius</span>
+      </label>
+      <label
+        style="color: white; font-size: 13px; display: block; margin-top: 4px;"
+      >
         Resolution:
         <select id="resolution-scale">
           <option value="normal">Normal</option>

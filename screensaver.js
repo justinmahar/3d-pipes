@@ -22,8 +22,17 @@ var textures = {};
 var Pipe = function(scene, options) {
   var self = this;
   var pipeRadius = 0.2;
-  // Visual wall thickness for hollow pipes.
-  var pipeWallThickness = 0.06;
+  var thicknessEnabled =
+    typeof options.thicknessEnabled === "boolean"
+      ? options.thicknessEnabled
+      : true;
+  var thicknessAmount =
+    typeof options.thicknessAmount === "number" ? options.thicknessAmount : 0.3;
+  if (!isFinite(thicknessAmount) || thicknessAmount < 0) {
+    thicknessAmount = 0;
+  } else if (thicknessAmount > 1) {
+    thicknessAmount = 1;
+  }
   var ballJointRadius = pipeRadius * 1.5;
   var teapotSize = ballJointRadius;
 
@@ -219,7 +228,31 @@ var Pipe = function(scene, options) {
     }
     var length = deltaVector.length();
 
-    // Outer shell
+    var baseMaterial =
+      self.colorMode === "normal" ? material : createPieceMaterial();
+
+    // Simple solid pipe when thickness is disabled: just one cylinder, no caps.
+    if (!thicknessEnabled || pipeThicknessAmount <= 0) {
+      var solidGeometry = new THREE.CylinderGeometry(
+        pipeRadius,
+        pipeRadius,
+        length,
+        radialSegments,
+        heightSegments,
+        true
+      );
+      solidGeometry.translate(0, length / 2, 0);
+      var solidMesh = new THREE.Mesh(solidGeometry, baseMaterial);
+      solidMesh.rotation.setFromQuaternion(arrow.quaternion);
+      solidMesh.position.copy(fromPoint);
+      solidMesh.updateMatrix();
+      self.object3d.add(solidMesh);
+      lastPipeAdvanceTime = performance.now();
+      scheduleGrow(solidMesh, "segment");
+      return;
+    }
+
+    // Hollow tube: outer and inner shells plus optional end caps.
     var outerGeometry = new THREE.CylinderGeometry(
       pipeRadius,
       pipeRadius,
@@ -231,11 +264,10 @@ var Pipe = function(scene, options) {
     // Move geometry so its base is at y=0 and it extends in +Y.
     outerGeometry.translate(0, length / 2, 0);
 
-    // Inner shell for hollow pipe. Clamp inner radius so walls aren't paper thin.
-    var innerRadius = Math.max(
-      pipeRadius - pipeWallThickness,
-      pipeRadius * 0.4
-    );
+    // Inner shell radius derived from configurable thicknessAmount.
+    var innerRadius = pipeRadius * (1 - pipeThicknessAmount);
+    // Clamp to avoid degenerate cases.
+    innerRadius = Math.max(0.01, Math.min(pipeRadius - 0.01, innerRadius));
     var innerGeometry = new THREE.CylinderGeometry(
       innerRadius,
       innerRadius,
@@ -246,8 +278,6 @@ var Pipe = function(scene, options) {
     );
     innerGeometry.translate(0, length / 2, 0);
 
-    var baseMaterial =
-      self.colorMode === "normal" ? material : createPieceMaterial();
     var outerMesh = new THREE.Mesh(outerGeometry, baseMaterial);
 
     // Inner surface uses back-face rendering so we see the inside of the tube.
@@ -643,6 +673,8 @@ var options = {
   snowFadeDuration: 0.6,
   isCandyScene: false,
   cutoffGraceSeconds: 3,
+  thicknessEnabled: true,
+  thicknessAmount: 0.3,
 };
 jointTypeSelect.addEventListener("change", function() {
   options.joints = jointTypeSelect.value;
@@ -651,6 +683,8 @@ jointTypeSelect.addEventListener("change", function() {
 // Quality controls
 var geometryQuality = "high"; // "low" | "medium" | "high"
 var resolutionScale = "retina"; // "normal" | "retina"
+var pipeThicknessEnabled = true;
+var pipeThicknessAmount = 0.3;
 
 var geometryQualitySelect = document.getElementById("geometry-quality");
 if (geometryQualitySelect) {
@@ -667,6 +701,43 @@ if (resolutionScaleSelect) {
     resolutionScale = resolutionScaleSelect.value || resolutionScale;
     applyRendererSettings();
   });
+}
+
+var pipeThicknessEnabledInput = document.getElementById(
+  "pipe-thickness-enabled"
+);
+var pipeThicknessAmountInput = document.getElementById("pipe-thickness-amount");
+
+function updatePipeThicknessFromUI() {
+  if (pipeThicknessEnabledInput) {
+    pipeThicknessEnabled = !!pipeThicknessEnabledInput.checked;
+    options.thicknessEnabled = pipeThicknessEnabled;
+  }
+  if (pipeThicknessAmountInput) {
+    var v = parseFloat(pipeThicknessAmountInput.value);
+    if (!isFinite(v) || v < 0) v = 0;
+    if (v > 1) v = 1;
+    pipeThicknessAmount = v;
+    options.thicknessAmount = v;
+    // Disable numeric input when thickness is off
+    pipeThicknessAmountInput.disabled = !pipeThicknessEnabled;
+  }
+}
+
+if (pipeThicknessEnabledInput || pipeThicknessAmountInput) {
+  updatePipeThicknessFromUI();
+  if (pipeThicknessEnabledInput) {
+    pipeThicknessEnabledInput.addEventListener(
+      "change",
+      updatePipeThicknessFromUI
+    );
+  }
+  if (pipeThicknessAmountInput) {
+    pipeThicknessAmountInput.addEventListener(
+      "change",
+      updatePipeThicknessFromUI
+    );
+  }
 }
 
 // Speed control elements
