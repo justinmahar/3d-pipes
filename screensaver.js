@@ -532,6 +532,7 @@ var options = {
   snowSpeed: 1,
   snowFadeDuration: 0.6,
   isCandyScene: false,
+  cutoffGraceSeconds: 3,
 };
 jointTypeSelect.addEventListener("change", function() {
   options.joints = jointTypeSelect.value;
@@ -608,6 +609,7 @@ var fastManualInput = document.getElementById("fast-manual-transitions");
 var fpsCutoffEnabledInput = document.getElementById("fps-cutoff-enabled");
 var fpsCutoffValueInput = document.getElementById("fps-cutoff-value");
 var idleCutoffSecondsInput = document.getElementById("idle-cutoff-seconds");
+var cutoffGraceSecondsInput = document.getElementById("cutoff-grace-seconds");
 var snowEnabledInput = document.getElementById("snow-enabled");
 var snowDensityInput = document.getElementById("snow-density");
 var snowSpeedInput = document.getElementById("snow-speed");
@@ -906,6 +908,15 @@ function updateSnowSettingsFromUI() {
   }
 }
 
+function updateCutoffGraceFromUI() {
+  if (!cutoffGraceSecondsInput) return;
+  var g = parseFloat(cutoffGraceSecondsInput.value);
+  if (!isFinite(g) || g < 0) {
+    g = 0;
+  }
+  options.cutoffGraceSeconds = g;
+}
+
 if (snowEnabledInput || snowDensityInput || snowSpeedInput) {
   // Initialize from UI, but don't rebuild snow geometry yet (scene not created).
   updateSnowSettingsFromUI();
@@ -932,6 +943,11 @@ if (snowEnabledInput || snowDensityInput || snowSpeedInput) {
       updateSnowSettingsFromUI();
     });
   }
+}
+
+if (cutoffGraceSecondsInput) {
+  updateCutoffGraceFromUI();
+  cutoffGraceSecondsInput.addEventListener("change", updateCutoffGraceFromUI);
 }
 
 var canvasContainer = document.getElementById("canvas-container");
@@ -1264,6 +1280,7 @@ var clearTID = -1;
 var clearDelayTID = -1;
 var lastFpsSampleTime = performance.now();
 var framesSinceFpsSample = 0;
+var sceneStartTime = performance.now();
 
 function beginTransition(fast) {
   if (clearing) {
@@ -1315,6 +1332,7 @@ function reset() {
   options.sceneIndex = (options.sceneIndex || 0) + 1;
   // reset per-scene flags
   options.isCandyScene = false;
+  sceneStartTime = performance.now();
   clearing = false;
 }
 
@@ -1333,6 +1351,8 @@ function stepOnce() {
     pipes[i].update(scene);
   }
   if (pipes.length === 0) {
+    // Starting a brand new scene of pipes.
+    sceneStartTime = performance.now();
     var inIntroVanillaPhase =
       (options.sceneIndex || 0) < (options.initialVanillaScenes || 0);
     var jointType = options.joints;
@@ -1517,17 +1537,22 @@ function animate() {
   // FPS display (render loop FPS, not simulation speed) and cutoff
   framesSinceFpsSample += 1;
   var sampleDt = now - lastFpsSampleTime;
+  var graceMs = (options.cutoffGraceSeconds || 0) * 1000;
+  var sceneElapsedMs = now - sceneStartTime;
   if (sampleDt >= 250) {
     var fps = (framesSinceFpsSample * 1000) / sampleDt;
     // Update on-screen FPS meter
     if (fpsDisplayEl && showFPSInput && showFPSInput.checked) {
       fpsDisplayEl.textContent = fps.toFixed(0) + " FPS";
     }
-    // FPS cutoff: if enabled and we're below the threshold, jump to next scene
+    // FPS cutoff: if enabled and we're below the threshold, jump to next scene,
+    // but only after the grace period so scenes can start cleanly, and never while paused.
     if (
       options.fpsCutoffEnabled &&
       fps < (options.fpsCutoffValue || 0) &&
-      !clearing
+      !clearing &&
+      !paused &&
+      sceneElapsedMs >= graceMs
     ) {
       clear(true);
     }
@@ -1537,7 +1562,7 @@ function animate() {
 
   // If no pipe has successfully laid a new segment for more than the
   // configured idle cutoff, assume we're stuck and skip to the next scene.
-  if (!clearing && !paused && pipes.length > 0) {
+  if (!clearing && !paused && pipes.length > 0 && sceneElapsedMs >= graceMs) {
     var idleMs = (options.idleCutoffSeconds || 0) * 1000;
     if (idleMs > 0) {
       var sinceAdvance = performance.now() - lastPipeAdvanceTime;
@@ -1656,6 +1681,17 @@ window.addEventListener(
     } else if (e.code === "Space") {
       e.preventDefault();
       paused = !paused;
+      if (paused) {
+        // While paused, don't allow automatic clears to fire.
+        clearTimeout(clearTID);
+        clearTimeout(clearDelayTID);
+      } else {
+        // When resuming, start a fresh timer for the next automatic clear.
+        clearTID = setTimeout(
+          clear,
+          random(options.interval[0], options.interval[1]) * 1000
+        );
+      }
     }
   },
   false
