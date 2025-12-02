@@ -28,6 +28,35 @@ var PIPE_DIRECTIONS = [
   new THREE.Vector3(0, 0, -1),
 ];
 
+// Shared geometry caches so we don't recreate small, similar meshes over and over.
+var ringGeometryCache = {};
+var sphereGeometryCache = {};
+
+function getRingGeometry(innerRadius, outerRadius, segments) {
+  var key =
+    innerRadius.toFixed(4) + ":" + outerRadius.toFixed(4) + ":" + segments;
+  if (!ringGeometryCache[key]) {
+    var geom = new THREE.RingGeometry(innerRadius, outerRadius, segments);
+    // Orient so the ring's normal points along +Y (pipe axis in local space),
+    // matching what makeCylinderBetweenPoints expects.
+    geom.rotateX(-Math.PI / 2);
+    ringGeometryCache[key] = geom;
+  }
+  return ringGeometryCache[key];
+}
+
+function getSphereGeometry(radius, segments) {
+  var key = radius.toFixed(4) + ":" + segments;
+  if (!sphereGeometryCache[key]) {
+    sphereGeometryCache[key] = new THREE.SphereGeometry(
+      radius,
+      segments,
+      segments
+    );
+  }
+  return sphereGeometryCache[key];
+}
+
 // Track the last time any pipe successfully laid a new segment.
 // Used to detect when the system has effectively stalled.
 var lastPipeAdvanceTime = performance.now();
@@ -310,12 +339,10 @@ var Pipe = function(scene, options) {
     // inner and outer shells. Caps are children of the segment group,
     // so they move with the pipe as it grows.
     var ringSegments =
-      pipeSidesOverride > 0 ? pipeSidesOverride : radialSegments * 1.2;
-    var ringGeometry = new THREE.RingGeometry(
-      innerRadius,
-      pipeRadius,
-      ringSegments
-    );
+      pipeSidesOverride > 0
+        ? pipeSidesOverride
+        : Math.round(radialSegments * 1.2);
+    var ringGeometry = getRingGeometry(innerRadius, pipeRadius, ringSegments);
     // Make the ring's normal point along +Y (pipe axis in local space)
     // so it faces out of the pipe ends when the segment group is rotated.
     ringGeometry.rotateX(-Math.PI / 2);
@@ -331,7 +358,7 @@ var Pipe = function(scene, options) {
     }
 
     // Far-end cap (at the tip of the segment) for the current head
-    var ringEnd = new THREE.Mesh(ringGeometry.clone(), ringMaterial.clone());
+    var ringEnd = new THREE.Mesh(ringGeometry, ringMaterial.clone());
     ringEnd.position.set(0, length + 0.001, 0);
     segmentGroup.add(ringEnd);
 
@@ -349,9 +376,7 @@ var Pipe = function(scene, options) {
           if (seg.userData.startCap.parent) {
             seg.userData.startCap.parent.remove(seg.userData.startCap);
           }
-          if (seg.userData.startCap.geometry) {
-            seg.userData.startCap.geometry.dispose();
-          }
+          // Geometry is shared from cache; don't dispose it.
           if (seg.userData.startCap.material) {
             seg.userData.startCap.material.dispose();
           }
@@ -361,9 +386,7 @@ var Pipe = function(scene, options) {
           if (seg.userData.endCap.parent) {
             seg.userData.endCap.parent.remove(seg.userData.endCap);
           }
-          if (seg.userData.endCap.geometry) {
-            seg.userData.endCap.geometry.dispose();
-          }
+          // Geometry is shared from cache; don't dispose it.
           if (seg.userData.endCap.material) {
             seg.userData.endCap.material.dispose();
           }
@@ -379,9 +402,7 @@ var Pipe = function(scene, options) {
           if (prevSeg.userData.endCap.parent) {
             prevSeg.userData.endCap.parent.remove(prevSeg.userData.endCap);
           }
-          if (prevSeg.userData.endCap.geometry) {
-            prevSeg.userData.endCap.geometry.dispose();
-          }
+          // Geometry is shared from cache; don't dispose it.
           if (prevSeg.userData.endCap.material) {
             prevSeg.userData.endCap.material.dispose();
           }
@@ -398,7 +419,7 @@ var Pipe = function(scene, options) {
     var segments = jointSegmentsOverride > 0 ? jointSegmentsOverride : 12;
     var ball = new THREE.Mesh(
       // Segment counts depend on geometry quality
-      new THREE.SphereGeometry(ballJointRadius, segments, segments),
+      getSphereGeometry(ballJointRadius, segments),
       createPieceMaterial()
     );
     ball.position.copy(position);
@@ -436,7 +457,7 @@ var Pipe = function(scene, options) {
     var segments = jointSegmentsOverride > 0 ? jointSegmentsOverride : 12;
     var elball = new THREE.Mesh(
       // Match ball joint smoothness / performance
-      new THREE.SphereGeometry(pipeRadius, segments, segments),
+      getSphereGeometry(pipeRadius, segments),
       createPieceMaterial()
     );
     elball.position.copy(fromPosition);
