@@ -1864,7 +1864,8 @@ function animate() {
       !paused &&
       sceneElapsedMs >= graceMs
     ) {
-      clear(true);
+      // Use the normal (non-fast) transition path for automatic FPS cutoffs
+      clear(false);
     }
     lastFpsSampleTime = now;
     framesSinceFpsSample = 0;
@@ -1877,7 +1878,10 @@ function animate() {
     if (idleMs > 0) {
       var sinceAdvance = performance.now() - lastPipeAdvanceTime;
       if (sinceAdvance > idleMs) {
-        clear(true);
+        // Use the normal (non-fast) transition path for automatic
+        // "stuck" detection, so it matches the regular interval-based
+        // transitions and respects the full duration settings.
+        clear(false);
       }
     }
   }
