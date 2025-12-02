@@ -158,7 +158,7 @@ var Pipe = function(scene, options) {
       specular: 0xa9fcff,
       color: color,
       emissive: emissive,
-      shininess: 100,
+      shininess: pipeShininess,
     });
   }
   function randomColorInScheme(scheme) {
@@ -270,7 +270,7 @@ var Pipe = function(scene, options) {
       specular: 0xa9fcff,
       color: color,
       emissive: emissive,
-      shininess: 100,
+      shininess: pipeShininess,
     });
   }
   function scheduleGrow(mesh, type) {
@@ -784,6 +784,7 @@ var options = {
   maxThickPipesPerScene: 3,
   turnTendencyMin: 0.2,
   turnTendencyMax: 0.8,
+  pipeShininess: 60,
 };
 jointTypeSelect.addEventListener("change", function() {
   options.joints = jointTypeSelect.value;
@@ -799,6 +800,7 @@ var jointSegmentsOverride = 0;
 var maxPipesPerScene = 0;
 var turnTendencyMin = 0.2;
 var turnTendencyMax = 0.8;
+var pipeShininess = 60;
 
 var resolutionScaleSelect = document.getElementById("resolution-scale");
 if (resolutionScaleSelect) {
@@ -942,6 +944,7 @@ var initialVanillaScenesInput = document.getElementById(
 );
 var turnTendencyMinInput = document.getElementById("turn-tendency-min");
 var turnTendencyMaxInput = document.getElementById("turn-tendency-max");
+var pipeShininessInput = document.getElementById("pipe-shininess");
 var transitionTypeRadios = document.querySelectorAll(
   'input[name="transition-type"]'
 );
@@ -1192,6 +1195,45 @@ if (turnTendencyMinInput || turnTendencyMaxInput) {
   if (turnTendencyMaxInput) {
     turnTendencyMaxInput.addEventListener("change", updateTurnTendencyFromUI);
   }
+}
+
+function updatePipeShininessFromUI() {
+  if (!pipeShininessInput) return;
+  var v = parseFloat(pipeShininessInput.value);
+  if (!isFinite(v) || v < 0) {
+    v = 0;
+  }
+  if (v > 200) {
+    v = 200;
+  }
+  pipeShininess = v;
+  options.pipeShininess = v;
+
+  // Apply to all existing MeshPhongMaterials in the scene so changes are live.
+  if (scene) {
+    scene.traverse(function(obj) {
+      var mat = obj.material;
+      if (!mat) return;
+      function applyShiny(m) {
+        if (m && typeof m.shininess === "number") {
+          m.shininess = pipeShininess;
+          m.needsUpdate = true;
+        }
+      }
+      if (Array.isArray(mat)) {
+        for (var i = 0; i < mat.length; i++) {
+          applyShiny(mat[i]);
+        }
+      } else {
+        applyShiny(mat);
+      }
+    });
+  }
+}
+
+if (pipeShininessInput) {
+  updatePipeShininessFromUI();
+  pipeShininessInput.addEventListener("change", updatePipeShininessFromUI);
 }
 
 if (transitionTypeRadios && transitionTypeRadios.length) {
