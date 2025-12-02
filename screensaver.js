@@ -19,6 +19,14 @@ var TMP_VEC_A = new THREE.Vector3();
 var TMP_VEC_B = new THREE.Vector3();
 var TMP_QUAT = new THREE.Quaternion();
 var UNIT_Y = new THREE.Vector3(0, 1, 0);
+var PIPE_DIRECTIONS = [
+  new THREE.Vector3(1, 0, 0),
+  new THREE.Vector3(-1, 0, 0),
+  new THREE.Vector3(0, 1, 0),
+  new THREE.Vector3(0, -1, 0),
+  new THREE.Vector3(0, 0, 1),
+  new THREE.Vector3(0, 0, -1),
+];
 
 // Track the last time any pipe successfully laid a new segment.
 // Used to detect when the system has effectively stalled.
@@ -519,38 +527,36 @@ var Pipe = function(scene, options) {
     var lastDirectionVector = null;
     if (self.positions.length > 1) {
       var lastPosition = self.positions[self.positions.length - 2];
-      lastDirectionVector = new THREE.Vector3().subVectors(
-        self.currentPosition,
-        lastPosition
-      );
+      // Reuse TMP_VEC_B for last direction (current - previous).
+      TMP_VEC_B.subVectors(self.currentPosition, lastPosition);
+      lastDirectionVector = TMP_VEC_B;
     }
-
-    // Build the six axis-aligned unit directions.
-    var allDirections = [
-      new THREE.Vector3(1, 0, 0),
-      new THREE.Vector3(-1, 0, 0),
-      new THREE.Vector3(0, 1, 0),
-      new THREE.Vector3(0, -1, 0),
-      new THREE.Vector3(0, 0, 1),
-      new THREE.Vector3(0, 0, -1),
-    ];
 
     // Choose a primary direction, preferring to continue straight when possible.
     var primaryDirection = null;
     if (lastDirectionVector && chance(1 / 2)) {
-      primaryDirection = lastDirectionVector.clone().normalize();
+      // Map lastDirectionVector to one of the canonical PIPE_DIRECTIONS.
+      for (var li = 0; li < PIPE_DIRECTIONS.length; li++) {
+        if (PIPE_DIRECTIONS[li].equals(lastDirectionVector)) {
+          primaryDirection = PIPE_DIRECTIONS[li];
+          break;
+        }
+      }
+      // Fallback if it somehow didn't match exactly.
+      if (!primaryDirection) {
+        primaryDirection = PIPE_DIRECTIONS[0];
+      }
     } else {
-      primaryDirection = new THREE.Vector3();
-      primaryDirection[chooseFrom("xyz")] = chooseFrom([+1, -1]);
+      primaryDirection = PIPE_DIRECTIONS[chooseFrom([0, 1, 2, 3, 4, 5])];
     }
 
     // Build a prioritized list of directions: primary first, then the rest shuffled.
     var prioritizedDirections = [];
     // Find a matching entry in allDirections for primaryDirection
     var primaryMatched = null;
-    for (var d = 0; d < allDirections.length; d++) {
-      if (allDirections[d].equals(primaryDirection)) {
-        primaryMatched = allDirections[d];
+    for (var d = 0; d < PIPE_DIRECTIONS.length; d++) {
+      if (PIPE_DIRECTIONS[d].equals(primaryDirection)) {
+        primaryMatched = PIPE_DIRECTIONS[d];
         break;
       }
     }
@@ -558,7 +564,7 @@ var Pipe = function(scene, options) {
       prioritizedDirections.push(primaryMatched);
     }
     // Add the remaining directions in random order
-    var remaining = allDirections.filter(function(dir) {
+    var remaining = PIPE_DIRECTIONS.filter(function(dir) {
       return !primaryMatched || !dir.equals(primaryMatched);
     });
     shuffleArrayInPlace(remaining);
@@ -566,23 +572,22 @@ var Pipe = function(scene, options) {
 
     // Try each direction at most once until we find a free, in-bounds cell.
     var directionVector = null;
-    var newPosition = null;
     for (var i = 0; i < prioritizedDirections.length; i++) {
       var dir = prioritizedDirections[i];
-      var candidate = new THREE.Vector3().addVectors(self.currentPosition, dir);
-      if (!gridBounds.containsPoint(candidate)) {
+      // Use shared TMP_VEC_A for candidate position.
+      TMP_VEC_A.addVectors(self.currentPosition, dir);
+      if (!gridBounds.containsPoint(TMP_VEC_A)) {
         continue;
       }
-      if (getAt(candidate)) {
+      if (getAt(TMP_VEC_A)) {
         continue;
       }
       directionVector = dir;
-      newPosition = candidate;
       break;
     }
 
     // If all 6 directions are blocked or out of bounds, this pipe is stuck.
-    if (!directionVector || !newPosition) {
+    if (!directionVector) {
       if (!self.stuckDecorated) {
         // console.log(
         //   "Pipe stuck: all 6 directions blocked or out of bounds at",
@@ -601,6 +606,8 @@ var Pipe = function(scene, options) {
       return;
     }
 
+    // Compute newPosition once from the chosen direction.
+    var newPosition = self.currentPosition.clone().add(directionVector);
     setAt(newPosition, self);
 
     // joint
