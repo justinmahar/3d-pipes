@@ -22,9 +22,13 @@ var textures = {};
 var Pipe = function(scene, options) {
   var self = this;
   var pipeRadius = 0.2;
-  // Use global thickness settings so the UI toggle and slider take
-  // immediate effect for newly created pipes.
+  // Per-pipe thickness: by default use global setting, but allow
+  // pipeOptions to override (so we can limit how many thick pipes
+  // exist in a scene).
   var thicknessEnabled = pipeThicknessEnabled;
+  if (typeof options.thicknessOverride === "boolean") {
+    thicknessEnabled = options.thicknessOverride;
+  }
   var thicknessAmount = pipeThicknessAmount;
   if (!isFinite(thicknessAmount) || thicknessAmount < 0) {
     thicknessAmount = 0;
@@ -691,6 +695,7 @@ var options = {
   cutoffGraceSeconds: 3,
   thicknessEnabled: true,
   thicknessAmount: 0.3,
+  maxThickPipesPerScene: 3,
 };
 jointTypeSelect.addEventListener("change", function() {
   options.joints = jointTypeSelect.value;
@@ -701,6 +706,7 @@ var geometryQuality = "high"; // "low" | "medium" | "high"
 var resolutionScale = "retina"; // "normal" | "retina"
 var pipeThicknessEnabled = true;
 var pipeThicknessAmount = 0.3;
+var pipeThicknessMax = 3;
 
 var geometryQualitySelect = document.getElementById("geometry-quality");
 if (geometryQualitySelect) {
@@ -723,6 +729,7 @@ var pipeThicknessEnabledInput = document.getElementById(
   "pipe-thickness-enabled"
 );
 var pipeThicknessAmountInput = document.getElementById("pipe-thickness-amount");
+var pipeThicknessMaxInput = document.getElementById("pipe-thickness-max");
 
 function updatePipeThicknessFromUI() {
   if (pipeThicknessEnabledInput) {
@@ -738,9 +745,19 @@ function updatePipeThicknessFromUI() {
     // Disable numeric input when thickness is off
     pipeThicknessAmountInput.disabled = !pipeThicknessEnabled;
   }
+  if (pipeThicknessMaxInput) {
+    var m = parseInt(pipeThicknessMaxInput.value, 10);
+    if (!isFinite(m) || m < 0) m = 0;
+    pipeThicknessMax = m;
+    options.maxThickPipesPerScene = m;
+  }
 }
 
-if (pipeThicknessEnabledInput || pipeThicknessAmountInput) {
+if (
+  pipeThicknessEnabledInput ||
+  pipeThicknessAmountInput ||
+  pipeThicknessMaxInput
+) {
   updatePipeThicknessFromUI();
   if (pipeThicknessEnabledInput) {
     pipeThicknessEnabledInput.addEventListener(
@@ -753,6 +770,9 @@ if (pipeThicknessEnabledInput || pipeThicknessAmountInput) {
       "change",
       updatePipeThicknessFromUI
     );
+  }
+  if (pipeThicknessMaxInput) {
+    pipeThicknessMaxInput.addEventListener("change", updatePipeThicknessFromUI);
   }
 }
 
@@ -1601,6 +1621,10 @@ function stepOnce() {
           pipeOptions.texturePath = null;
         }
       }
+      // Limit how many pipes in a scene use hollow/thick geometry.
+      var useThicknessForThisPipe =
+        pipeThicknessEnabled && i < pipeThicknessMax;
+      pipeOptions.thicknessOverride = useThicknessForThisPipe;
       pipes.push(new Pipe(scene, pipeOptions));
     }
   }
